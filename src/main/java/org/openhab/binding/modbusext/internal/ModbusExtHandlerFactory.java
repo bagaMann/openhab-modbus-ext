@@ -19,7 +19,7 @@ import org.osgi.service.component.annotations.Reference;
 @Component(service = ThingHandlerFactory.class, configurationPid = "binding.modbusext")
 @NonNullByDefault
 public class ModbusExtHandlerFactory extends BaseThingHandlerFactory {
-    private @NonNullByDefault({}) ModbusManager manager;
+    private @Nullable ModbusManager manager;
 
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -30,7 +30,8 @@ public class ModbusExtHandlerFactory extends BaseThingHandlerFactory {
     protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID type = thing.getThingTypeUID();
         if (THING_TYPE_TCP.equals(type)) {
-            return new ModbusExtTcpHandler((Bridge) thing, manager);
+            ModbusManager localManager = manager;
+            return localManager == null ? null : new ModbusExtTcpHandler((Bridge) thing, localManager);
         }
         if (THING_TYPE_POLLER.equals(type)) {
             return new ModbusExtPollerHandler((Bridge) thing);

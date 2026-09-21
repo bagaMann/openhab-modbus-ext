@@ -61,9 +61,15 @@ final class ModbusChannelRuntime {
             throw new IllegalArgumentException("Invalid readStart '" + config.readStart + "'", e);
         }
 
-        ValueType valueType = ValueType.fromConfigValue(config.readValueType);
-        if (valueType == null) {
-            throw new IllegalArgumentException("Invalid readValueType '" + config.readValueType + "'");
+        String configuredReadValueType = config.readValueType == null ? "" : config.readValueType.trim();
+        ValueType valueType;
+        if (!poller.registerPoll() && configuredReadValueType.isBlank()) {
+            valueType = ValueType.BIT;
+        } else {
+            valueType = ValueType.fromConfigValue(configuredReadValueType);
+            if (valueType == null) {
+                throw new IllegalArgumentException("Invalid readValueType '" + config.readValueType + "'");
+            }
         }
 
         if (!poller.registerPoll()) {

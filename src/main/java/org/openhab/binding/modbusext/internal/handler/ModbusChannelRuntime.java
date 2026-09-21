@@ -11,6 +11,8 @@ import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.types.State;
@@ -25,9 +27,10 @@ final class ModbusChannelRuntime {
     private final int readIndex;
     private final int readSubIndex;
     private final ValueType readValueType;
+    private final String itemType;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
-            int readSubIndex, ValueType readValueType) {
+            int readSubIndex, ValueType readValueType, String itemType) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -35,6 +38,7 @@ final class ModbusChannelRuntime {
         this.readIndex = readIndex;
         this.readSubIndex = readSubIndex;
         this.readValueType = readValueType;
+        this.itemType = itemType;
     }
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
@@ -87,7 +91,7 @@ final class ModbusChannelRuntime {
         }
 
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(), index,
-                subIndex, valueType);
+                subIndex, valueType, channel.getAcceptedItemType());
     }
 
     ChannelUID uid() {
@@ -95,12 +99,28 @@ final class ModbusChannelRuntime {
     }
 
     State extract(AsyncModbusReadResult result) {
+        State numeric;
         if (registerPoll) {
             Optional<ModbusRegisterArray> registers = result.getRegisters();
-            return registers.<State>map(this::extractRegisters).orElse(UnDefType.UNDEF);
+            numeric = registers.<State>map(this::extractRegisters).orElse(UnDefType.UNDEF);
+        } else {
+            Optional<BitArray> bits = result.getBits();
+            numeric = bits.<State>map(this::extractBits).orElse(UnDefType.UNDEF);
         }
-        Optional<BitArray> bits = result.getBits();
-        return bits.<State>map(this::extractBits).orElse(UnDefType.UNDEF);
+        return adaptToItemType(numeric);
+    }
+
+    private State adaptToItemType(State numeric) {
+        if (numeric == UnDefType.UNDEF) {
+            return numeric;
+        }
+        boolean boolValue = !DecimalType.ZERO.equals(numeric);
+        return switch (itemType) {
+            case "Switch" -> OnOffType.from(boolValue);
+            case "Contact" -> boolValue ? OpenClosedType.OPEN : OpenClosedType.CLOSED;
+            case "Number" -> numeric;
+            default -> numeric;
+        };
     }
 
     private State extractRegisters(ModbusRegisterArray registers) {

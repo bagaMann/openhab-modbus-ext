@@ -1,9 +1,11 @@
 package org.openhab.binding.modbusext.internal.handler;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.modbusext.internal.ModbusExtTransformation;
 import org.openhab.binding.modbusext.internal.config.ModbusChannelConfig;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
 import org.openhab.core.io.transport.modbus.BitArray;
@@ -28,9 +30,10 @@ final class ModbusChannelRuntime {
     private final int readSubIndex;
     private final ValueType readValueType;
     private final String itemType;
+    private final ModbusExtTransformation readTransformation;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
-            int readSubIndex, ValueType readValueType, String itemType) {
+            int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -39,6 +42,7 @@ final class ModbusChannelRuntime {
         this.readSubIndex = readSubIndex;
         this.readValueType = readValueType;
         this.itemType = itemType;
+        this.readTransformation = readTransformation;
     }
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
@@ -91,7 +95,8 @@ final class ModbusChannelRuntime {
         }
 
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(), index,
-                subIndex, valueType, channel.getAcceptedItemType());
+                subIndex, valueType, channel.getAcceptedItemType(),
+                new ModbusExtTransformation(List.of(config.readTransform)));
     }
 
     ChannelUID uid() {
@@ -115,12 +120,22 @@ final class ModbusChannelRuntime {
             return numeric;
         }
         boolean boolValue = !DecimalType.ZERO.equals(numeric);
-        return switch (itemType) {
-            case "Switch" -> OnOffType.from(boolValue);
-            case "Contact" -> boolValue ? OpenClosedType.OPEN : OpenClosedType.CLOSED;
-            case "Number" -> numeric;
-            default -> numeric;
+        if (readTransformation.isIdentityTransform()) {
+            return switch (itemType) {
+                case "Switch" -> OnOffType.from(boolValue);
+                case "Contact" -> boolValue ? OpenClosedType.OPEN : OpenClosedType.CLOSED;
+                case "Number" -> numeric;
+                default -> numeric;
+            };
+        }
+        List<Class<? extends State>> accepted = switch (itemType) {
+            case "Switch" -> List.of(OnOffType.class);
+            case "Contact" -> List.of(OpenClosedType.class);
+            case "Number" -> List.of(DecimalType.class);
+            default -> List.of(DecimalType.class);
         };
+        State transformed = readTransformation.transformState(accepted, numeric);
+        return transformed != null ? transformed : UnDefType.UNDEF;
     }
 
     private State extractRegisters(ModbusRegisterArray registers) {

@@ -1,5 +1,7 @@
 package org.openhab.binding.modbusext.internal.handler;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -15,6 +17,7 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.PollTask;
 import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
@@ -40,6 +43,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     private volatile @Nullable AsyncModbusReadResult lastResult;
     private volatile long lastResultTimestamp;
     private ModbusPollerConfig config = new ModbusPollerConfig();
+    private volatile List<ModbusChannelRuntime> channelRuntimes = List.of();
 
     public ModbusExtPollerHandler(Bridge bridge) {
         super(bridge);
@@ -66,14 +70,19 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                     "start must be >= 0 and length must be >= 1");
             return;
         }
-        if (isRegisterFunction(functionCode) && config.length > ModbusConstants.MAX_REGISTERS_READ_COUNT) {
+        boolean registerPoll = isRegisterFunction(functionCode);
+        if (registerPoll && config.length > ModbusConstants.MAX_REGISTERS_READ_COUNT) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
                     "Register poll length exceeds Modbus protocol limit");
             return;
         }
-        if (!isRegisterFunction(functionCode) && config.length > ModbusConstants.MAX_BITS_READ_COUNT) {
+        if (!registerPoll && config.length > ModbusConstants.MAX_BITS_READ_COUNT) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
                     "Bit poll length exceeds Modbus protocol limit");
+            return;
+        }
+
+        if (!buildChannelRuntimes(registerPoll)) {
             return;
         }
 
@@ -105,8 +114,15 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     public void handle(AsyncModbusReadResult result) {
         lastResult = result;
         lastResultTimestamp = System.currentTimeMillis();
-        // Next step: fan this same result out to all configured channel runtimes.
-        logger.trace("Poller {} received {}", thing.getUID(), result);
+        for (ModbusChannelRuntime runtime : channelRuntimes) {
+            updateState(runtime.uid(), runtime.extract(result));
+        }
+        ThingStatusInfo status = thing.getStatusInfo();
+        if (status.getStatus() == ThingStatus.OFFLINE
+                && status.getStatusDetail() == ThingStatusDetail.COMMUNICATION_ERROR) {
+            updateStatus(ThingStatus.ONLINE);
+        }
+        logger.trace("Poller {} distributed one response to {} channels", thing.getUID(), channelRuntimes.size());
     }
 
     @Override
@@ -130,6 +146,25 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     public synchronized void dispose() {
         unregisterPollTask();
         lastResult = null;
+        channelRuntimes = List.of();
+    }
+
+
+    private boolean buildChannelRuntimes(boolean registerPoll) {
+        List<ModbusChannelRuntime> runtimes = new ArrayList<>();
+        ModbusChannelRuntime.ModbusPollerConfigView view =
+                new ModbusChannelRuntime.ModbusPollerConfigView(config.start, config.length, registerPoll);
+        for (Channel channel : thing.getChannels()) {
+            try {
+                runtimes.add(ModbusChannelRuntime.create(channel, view));
+            } catch (IllegalArgumentException e) {
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                logger.debug("Invalid channel configuration for {}: {}", channel.getUID(), e.getMessage());
+                return false;
+            }
+        }
+        channelRuntimes = List.copyOf(runtimes);
+        return true;
     }
 
     private void unregisterPollTask() {

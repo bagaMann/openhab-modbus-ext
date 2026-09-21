@@ -147,7 +147,7 @@ final class ModbusChannelRuntime {
     }
 
     private State extractBits(BitArray bits) {
-        return bits.getBit(readIndex - pollStart) ? DecimalType.ONE : DecimalType.ZERO;
+        return bits.getBit(readIndex - pollStart) ? new DecimalType(java.math.BigDecimal.ONE) : DecimalType.ZERO;
     }
 
     record ModbusPollerConfigView(int start, int length, boolean registerPoll) {

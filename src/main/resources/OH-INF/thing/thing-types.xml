@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="modbusext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <bridge-type id="poller" extensible="number,switch,contact,string,dimmer,rollershutter,datetime">
+        <label>Modbus Ext Poller</label>
+        <description>Reads one Modbus range and exposes values as configurable channels.</description>
+        <config-description>
+            <parameter name="start" type="integer" required="true" min="0"><label>Start</label><default>0</default></parameter>
+            <parameter name="length" type="integer" required="true" min="1"><label>Length</label><default>1</default></parameter>
+            <parameter name="type" type="text" required="true"><label>Type</label><options>
+                <option value="coil">Coil</option><option value="discrete">Discrete Input</option>
+                <option value="holding">Holding Register</option><option value="input">Input Register</option>
+            </options><limitToOptions>true</limitToOptions><default>holding</default></parameter>
+            <parameter name="refresh" type="integer" unit="ms" min="0"><label>Refresh</label><default>500</default></parameter>
+            <parameter name="maxTries" type="integer" min="1"><label>Maximum Tries</label><default>3</default><advanced>true</advanced></parameter>
+            <parameter name="cacheMillis" type="integer" unit="ms" min="0"><label>Cache</label><default>50</default><advanced>true</advanced></parameter>
+        </config-description>
+    </bridge-type>
+
+    <channel-type id="number"><item-type>Number</item-type><label>Modbus Number</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="switch"><item-type>Switch</item-type><label>Modbus Switch</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="contact"><item-type>Contact</item-type><label>Modbus Contact</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="string"><item-type>String</item-type><label>Modbus String</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="dimmer"><item-type>Dimmer</item-type><label>Modbus Dimmer</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="rollershutter"><item-type>Rollershutter</item-type><label>Modbus Rollershutter</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="datetime"><item-type>DateTime</item-type><label>Modbus DateTime</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+
+    <config-description uri="channel-type:modbusext:channel-config">
+        <parameter name="readStart" type="text"><label>Read Start</label><description>Absolute Modbus address. Use X.Y for bit/8-bit sub-index.</description></parameter>
+        <parameter name="readValueType" type="text"><label>Read Value Type</label><default>uint16</default><options>
+            <option value="bit">bit</option><option value="int8">int8</option><option value="uint8">uint8</option>
+            <option value="int16">int16</option><option value="uint16">uint16</option>
+            <option value="int32">int32</option><option value="uint32">uint32</option><option value="float32">float32</option>
+            <option value="int32_swap">int32_swap</option><option value="uint32_swap">uint32_swap</option><option value="float32_swap">float32_swap</option>
+            <option value="int64">int64</option><option value="uint64">uint64</option>
+            <option value="int64_swap">int64_swap</option><option value="uint64_swap">uint64_swap</option>
+        </options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="readTransform" type="text"><label>Read Transform</label><default>default</default><advanced>true</advanced></parameter>
+        <parameter name="writeStart" type="text"><label>Write Start</label></parameter>
+        <parameter name="writeValueType" type="text"><label>Write Value Type</label><default>uint16</default><options>
+            <option value="bit">bit</option><option value="int8">int8</option><option value="uint8">uint8</option>
+            <option value="int16">int16</option><option value="uint16">uint16</option>
+            <option value="int32">int32</option><option value="uint32">uint32</option><option value="float32">float32</option>
+            <option value="int32_swap">int32_swap</option><option value="uint32_swap">uint32_swap</option><option value="float32_swap">float32_swap</option>
+            <option value="int64">int64</option><option value="uint64">uint64</option>
+            <option value="int64_swap">int64_swap</option><option value="uint64_swap">uint64_swap</option>
+        </options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="writeType" type="text"><label>Write Type</label><default>holding</default><options>
+            <option value="coil">Coil</option><option value="holding">Holding Register</option>
+        </options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="writeTransform" type="text"><label>Write Transform</label><default>default</default><advanced>true</advanced></parameter>
+        <parameter name="updateUnchangedValuesEveryMillis" type="integer" unit="ms" min="0"><label>Update Unchanged Values</label><default>1000</default><advanced>true</advanced></parameter>
+    </config-description>
+</thing:thing-descriptions>

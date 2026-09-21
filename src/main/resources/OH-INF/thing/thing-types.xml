@@ -20,15 +20,15 @@
         </config-description>
     </bridge-type>
 
-    <channel-type id="number"><item-type>Number</item-type><label>Modbus Number</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="switch"><item-type>Switch</item-type><label>Modbus Switch</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="contact"><item-type>Contact</item-type><label>Modbus Contact</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="string"><item-type>String</item-type><label>Modbus String</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="dimmer"><item-type>Dimmer</item-type><label>Modbus Dimmer</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="rollershutter"><item-type>Rollershutter</item-type><label>Modbus Rollershutter</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="datetime"><item-type>DateTime</item-type><label>Modbus DateTime</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <channel-type id="number"><item-type>Number</item-type><label>Modbus Number</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
+    <channel-type id="switch"><item-type>Switch</item-type><label>Modbus Switch</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
+    <channel-type id="contact"><item-type>Contact</item-type><label>Modbus Contact</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
+    <channel-type id="string"><item-type>String</item-type><label>Modbus String</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
+    <channel-type id="dimmer"><item-type>Dimmer</item-type><label>Modbus Dimmer</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
+    <channel-type id="rollershutter"><item-type>Rollershutter</item-type><label>Modbus Rollershutter</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
+    <channel-type id="datetime"><item-type>DateTime</item-type><label>Modbus DateTime</label><config-description-ref uri="config:modbusext:channel"/></channel-type>
 
-    <config-description uri="channel-type:modbusext:channel-config">
+    <config-description uri="config:modbusext:channel">
         <parameter name="readStart" type="text"><label>Read Start</label><description>Absolute Modbus address. Use X.Y for bit/8-bit sub-index.</description></parameter>
         <parameter name="readValueType" type="text"><label>Read Value Type</label><default>uint16</default><options>
             <option value="bit">bit</option><option value="int8">int8</option><option value="uint8">uint8</option>

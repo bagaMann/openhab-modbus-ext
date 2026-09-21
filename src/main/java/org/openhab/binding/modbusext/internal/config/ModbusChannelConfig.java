@@ -6,7 +6,7 @@ import org.eclipse.jdt.annotation.Nullable;
 @NonNullByDefault
 public class ModbusChannelConfig {
     public String readStart = "";
-    public String readValueType = "uint16";
+    public String readValueType = "";
     public String readTransform = "default";
 
     public String writeStart = "";

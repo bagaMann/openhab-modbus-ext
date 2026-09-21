@@ -18,6 +18,16 @@
     <bnd.version>7.3.0</bnd.version>
   </properties>
 
+  <repositories>
+    <repository>
+      <id>openhab-release</id>
+      <name>openHAB Release Repository</name>
+      <url>https://openhab.jfrog.io/artifactory/libs-release</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </repository>
+  </repositories>
+
   <dependencyManagement>
     <dependencies>
       <dependency>

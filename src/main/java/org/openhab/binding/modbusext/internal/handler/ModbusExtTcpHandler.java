@@ -32,7 +32,6 @@ public class ModbusExtTcpHandler extends ModbusExtEndpointHandler<ModbusTCPSlave
         pool.setInterConnectDelayMillis(config.timeBetweenReconnectMillis);
         pool.setInterTransactionDelayMillis(config.timeBetweenTransactionsMillis);
         pool.setReconnectAfterMillis(config.reconnectAfterMillis);
-        pool.setReceiveTimeoutMillis(config.receiveTimeoutMillis);
         return pool;
     }
 }

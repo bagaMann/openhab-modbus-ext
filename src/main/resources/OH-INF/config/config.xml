@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config:config-descriptions
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:config="https://openhab.org/schemas/config-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+    <config-description uri="channel-type:modbusext:channel-config">
+        <parameter name="readStart" type="text"><label>Read Start</label><description>Absolute Modbus address. Use X.Y for bit/8-bit sub-index.</description></parameter>
+        <parameter name="readValueType" type="text"><label>Read Value Type</label><default>uint16</default><options>
+            <option value="bit">bit</option><option value="int8">int8</option><option value="uint8">uint8</option>
+            <option value="int16">int16</option><option value="uint16">uint16</option>
+            <option value="int32">int32</option><option value="uint32">uint32</option><option value="float32">float32</option>
+            <option value="int32_swap">int32_swap</option><option value="uint32_swap">uint32_swap</option><option value="float32_swap">float32_swap</option>
+            <option value="int64">int64</option><option value="uint64">uint64</option>
+            <option value="int64_swap">int64_swap</option><option value="uint64_swap">uint64_swap</option>
+        </options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="readTransform" type="text"><label>Read Transform</label><default>default</default><advanced>true</advanced></parameter>
+        <parameter name="writeStart" type="text"><label>Write Start</label></parameter>
+        <parameter name="writeValueType" type="text"><label>Write Value Type</label><default>uint16</default><options>
+            <option value="bit">bit</option><option value="int8">int8</option><option value="uint8">uint8</option>
+            <option value="int16">int16</option><option value="uint16">uint16</option>
+            <option value="int32">int32</option><option value="uint32">uint32</option><option value="float32">float32</option>
+            <option value="int32_swap">int32_swap</option><option value="uint32_swap">uint32_swap</option><option value="float32_swap">float32_swap</option>
+            <option value="int64">int64</option><option value="uint64">uint64</option>
+            <option value="int64_swap">int64_swap</option><option value="uint64_swap">uint64_swap</option>
+        </options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="writeType" type="text"><label>Write Type</label><default>holding</default><options>
+            <option value="coil">Coil</option><option value="holding">Holding Register</option>
+        </options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="writeTransform" type="text"><label>Write Transform</label><default>default</default><advanced>true</advanced></parameter>
+        <parameter name="updateUnchangedValuesEveryMillis" type="integer" unit="ms" min="0"><label>Update Unchanged Values</label><default>1000</default><advanced>true</advanced></parameter>
+    </config-description>
+</config:config-descriptions>

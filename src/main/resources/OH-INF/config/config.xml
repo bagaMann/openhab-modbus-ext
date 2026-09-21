@@ -6,7 +6,7 @@
 
     <config-description uri="channel-type:modbusext:channel-config">
         <parameter name="readStart" type="text"><label>Read Start</label><description>Absolute Modbus address. Use X.Y for bit/8-bit sub-index.</description></parameter>
-        <parameter name="readValueType" type="text"><label>Read Value Type</label><default>uint16</default><options>
+        <parameter name="readValueType" type="text"><label>Read Value Type</label><description>Leave empty for coil/discrete polls; bit is selected automatically.</description><options>
             <option value="bit">bit</option><option value="int8">int8</option><option value="uint8">uint8</option>
             <option value="int16">int16</option><option value="uint16">uint16</option>
             <option value="int32">int32</option><option value="uint32">uint32</option><option value="float32">float32</option>

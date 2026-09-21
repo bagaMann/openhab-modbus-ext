@@ -5,6 +5,10 @@
     xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
     <bridge-type id="poller" extensible="number,switch,contact,string,dimmer,rollershutter,datetime">
+        <supported-bridge-type-refs>
+            <bridge-type-ref id="tcp"/>
+            <bridge-type-ref id="serial"/>
+        </supported-bridge-type-refs>
         <label>Modbus Ext Poller</label>
         <description>Reads one Modbus range and exposes values as configurable channels.</description>
         <config-description>

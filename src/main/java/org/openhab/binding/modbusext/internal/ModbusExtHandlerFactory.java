@@ -4,7 +4,8 @@ import static org.openhab.binding.modbusext.internal.ModbusExtBindingConstants.*
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.modbusext.internal.handler.ModbusExtTcpHandler;\nimport org.openhab.binding.modbusext.internal.handler.ModbusExtPollerHandler;
+import org.openhab.binding.modbusext.internal.handler.ModbusExtPollerHandler;
+import org.openhab.binding.modbusext.internal.handler.ModbusExtTcpHandler;
 import org.openhab.core.io.transport.modbus.ModbusManager;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
@@ -31,7 +32,10 @@ public class ModbusExtHandlerFactory extends BaseThingHandlerFactory {
         if (THING_TYPE_TCP.equals(type)) {
             return new ModbusExtTcpHandler((Bridge) thing, manager);
         }
-        if (THING_TYPE_POLLER.equals(type)) {\n            return new ModbusExtPollerHandler((Bridge) thing);\n        }\n        return null;
+        if (THING_TYPE_POLLER.equals(type)) {
+            return new ModbusExtPollerHandler((Bridge) thing);
+        }
+        return null;
     }
 
     @Reference

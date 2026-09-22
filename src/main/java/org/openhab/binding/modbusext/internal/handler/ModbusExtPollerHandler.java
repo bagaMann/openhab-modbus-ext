@@ -16,6 +16,8 @@ import org.openhab.core.io.transport.modbus.ModbusFailureCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
+import org.openhab.core.io.transport.modbus.ModbusWriteCoilRequestBlueprint;
 import org.openhab.core.io.transport.modbus.PollTask;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
@@ -47,7 +49,44 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        // Channel command/write support is added after the read path is validated.
+        if (!THING_TYPE_COIL_POLLER.equals(thing.getThingTypeUID())) {
+            logger.debug("Ignoring command {} for {}: write support for this poller is not implemented yet", command,
+                    channelUID);
+            return;
+        }
+
+        ModbusChannelRuntime runtime = channelRuntimes.stream().filter(candidate -> candidate.uid().equals(channelUID))
+                .findFirst().orElse(null);
+        if (runtime == null) {
+            logger.warn("Ignoring command {} for unknown channel {}", command, channelUID);
+            return;
+        }
+
+        Integer writeStart = runtime.writeStart();
+        if (writeStart == null) {
+            logger.debug("Ignoring command {} for {}: writeStart is not configured", command, channelUID);
+            return;
+        }
+
+        var value = ModbusBitUtilities.translateCommand2Boolean(command);
+        if (value.isEmpty()) {
+            logger.warn("Cannot convert command {} for channel {} to a coil value", command, channelUID);
+            return;
+        }
+
+        ModbusCommunicationInterface localComms = comms;
+        ModbusExtEndpointHandler<?> endpoint = getEndpointHandler();
+        if (localComms == null || endpoint == null) {
+            logger.warn("Cannot write channel {} because Modbus endpoint is not online", channelUID);
+            return;
+        }
+
+        ModbusWriteCoilRequestBlueprint request = new ModbusWriteCoilRequestBlueprint(endpoint.getSlaveId(),
+                writeStart, value.get(), false, config.maxTries);
+        logger.debug("Writing coil {}={} for channel {}", writeStart, value.get(), channelUID);
+        localComms.submitOneTimeWrite(request,
+                result -> logger.debug("Coil write succeeded for channel {}: {}", channelUID, result),
+                failure -> logger.warn("Coil write failed for channel {}: {}", channelUID, failure));
     }
 
     @Override

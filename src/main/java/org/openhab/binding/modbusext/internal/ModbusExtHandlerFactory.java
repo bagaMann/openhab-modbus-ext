@@ -33,7 +33,7 @@ public class ModbusExtHandlerFactory extends BaseThingHandlerFactory {
             ModbusManager localManager = manager;
             return localManager == null ? null : new ModbusExtTcpHandler((Bridge) thing, localManager);
         }
-        if (THING_TYPE_POLLER.equals(type)) {
+        if (POLLER_THING_TYPES.contains(type)) {
             return new ModbusExtPollerHandler((Bridge) thing);
         }
         return null;

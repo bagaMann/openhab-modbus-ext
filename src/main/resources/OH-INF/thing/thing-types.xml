@@ -4,33 +4,52 @@
     xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
     xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-    <bridge-type id="poller" extensible="number,switch,contact,string,dimmer,rollershutter,datetime">
-        <supported-bridge-type-refs>
-            <bridge-type-ref id="tcp"/>
-            <bridge-type-ref id="serial"/>
-        </supported-bridge-type-refs>
-        <label>Modbus Ext Poller</label>
-        <description>Reads one Modbus range and exposes values as configurable channels.</description>
-        <config-description>
-            <parameter name="start" type="integer" required="true" min="0"><label>Start</label><default>0</default></parameter>
-            <parameter name="length" type="integer" required="true" min="1"><label>Length</label><default>1</default></parameter>
-            <parameter name="type" type="text" required="true"><label>Type</label><options>
-                <option value="coil">Coil</option><option value="discrete">Discrete Input</option>
-                <option value="holding">Holding Register</option><option value="input">Input Register</option>
-            </options><limitToOptions>true</limitToOptions><default>holding</default></parameter>
-            <parameter name="refresh" type="integer" unit="ms" min="0"><label>Refresh</label><default>500</default></parameter>
-            <parameter name="maxTries" type="integer" min="1"><label>Maximum Tries</label><default>3</default><advanced>true</advanced></parameter>
-            <parameter name="cacheMillis" type="integer" unit="ms" min="0"><label>Cache</label><default>50</default><advanced>true</advanced></parameter>
-        </config-description>
+    <bridge-type id="discrete-poller" extensible="discrete-switch,discrete-contact">
+        <supported-bridge-type-refs><bridge-type-ref id="tcp"/><bridge-type-ref id="serial"/></supported-bridge-type-refs>
+        <label>Modbus Ext Discrete Input Poller</label>
+        <description>Reads a range of discrete inputs. Channels are read-only binary values.</description>
+        <config-description-ref uri="thing-type:modbusext:poller-config"/>
     </bridge-type>
 
-    <channel-type id="number"><item-type>Number</item-type><label>Modbus Number</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="switch"><item-type>Switch</item-type><label>Modbus Switch</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="contact"><item-type>Contact</item-type><label>Modbus Contact</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="string"><item-type>String</item-type><label>Modbus String</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="dimmer"><item-type>Dimmer</item-type><label>Modbus Dimmer</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="rollershutter"><item-type>Rollershutter</item-type><label>Modbus Rollershutter</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
-    <channel-type id="datetime"><item-type>DateTime</item-type><label>Modbus DateTime</label><config-description-ref uri="channel-type:modbusext:channel-config"/></channel-type>
+    <bridge-type id="coil-poller" extensible="coil-switch,coil-contact">
+        <supported-bridge-type-refs><bridge-type-ref id="tcp"/><bridge-type-ref id="serial"/></supported-bridge-type-refs>
+        <label>Modbus Ext Coil Poller</label>
+        <description>Reads a range of coils and exposes binary channels.</description>
+        <config-description-ref uri="thing-type:modbusext:poller-config"/>
+    </bridge-type>
 
+    <bridge-type id="input-poller" extensible="input-number,input-switch,input-contact,input-string,input-dimmer,input-rollershutter,input-datetime">
+        <supported-bridge-type-refs><bridge-type-ref id="tcp"/><bridge-type-ref id="serial"/></supported-bridge-type-refs>
+        <label>Modbus Ext Input Register Poller</label>
+        <description>Reads a range of input registers. Channels are read-only.</description>
+        <config-description-ref uri="thing-type:modbusext:poller-config"/>
+    </bridge-type>
 
+    <bridge-type id="holding-poller" extensible="holding-number,holding-switch,holding-contact,holding-string,holding-dimmer,holding-rollershutter,holding-datetime">
+        <supported-bridge-type-refs><bridge-type-ref id="tcp"/><bridge-type-ref id="serial"/></supported-bridge-type-refs>
+        <label>Modbus Ext Holding Register Poller</label>
+        <description>Reads a range of holding registers and supports writable channels.</description>
+        <config-description-ref uri="thing-type:modbusext:poller-config"/>
+    </bridge-type>
+
+    <channel-type id="discrete-switch"><item-type>Switch</item-type><label>Switch</label><config-description-ref uri="channel-type:modbusext:bit-read"/></channel-type>
+    <channel-type id="discrete-contact"><item-type>Contact</item-type><label>Contact</label><config-description-ref uri="channel-type:modbusext:bit-read"/></channel-type>
+    <channel-type id="coil-switch"><item-type>Switch</item-type><label>Switch</label><config-description-ref uri="channel-type:modbusext:coil"/></channel-type>
+    <channel-type id="coil-contact"><item-type>Contact</item-type><label>Contact</label><config-description-ref uri="channel-type:modbusext:coil"/></channel-type>
+
+    <channel-type id="input-number"><item-type>Number</item-type><label>Number</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+    <channel-type id="input-switch"><item-type>Switch</item-type><label>Switch</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+    <channel-type id="input-contact"><item-type>Contact</item-type><label>Contact</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+    <channel-type id="input-string"><item-type>String</item-type><label>String</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+    <channel-type id="input-dimmer"><item-type>Dimmer</item-type><label>Dimmer</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+    <channel-type id="input-rollershutter"><item-type>Rollershutter</item-type><label>Rollershutter</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+    <channel-type id="input-datetime"><item-type>DateTime</item-type><label>DateTime</label><config-description-ref uri="channel-type:modbusext:register-read"/></channel-type>
+
+    <channel-type id="holding-number"><item-type>Number</item-type><label>Number</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
+    <channel-type id="holding-switch"><item-type>Switch</item-type><label>Switch</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
+    <channel-type id="holding-contact"><item-type>Contact</item-type><label>Contact</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
+    <channel-type id="holding-string"><item-type>String</item-type><label>String</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
+    <channel-type id="holding-dimmer"><item-type>Dimmer</item-type><label>Dimmer</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
+    <channel-type id="holding-rollershutter"><item-type>Rollershutter</item-type><label>Rollershutter</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
+    <channel-type id="holding-datetime"><item-type>DateTime</item-type><label>DateTime</label><config-description-ref uri="channel-type:modbusext:register-rw"/></channel-type>
 </thing:thing-descriptions>

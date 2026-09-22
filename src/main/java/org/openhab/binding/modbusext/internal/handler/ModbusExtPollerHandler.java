@@ -18,6 +18,9 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
 import org.openhab.core.io.transport.modbus.ModbusWriteCoilRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusWriteRegisterRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.PollTask;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
@@ -49,12 +52,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (!THING_TYPE_COIL_POLLER.equals(thing.getThingTypeUID())) {
-            logger.debug("Ignoring command {} for {}: write support for this poller is not implemented yet", command,
-                    channelUID);
-            return;
-        }
-
         ModbusChannelRuntime runtime = channelRuntimes.stream().filter(candidate -> candidate.uid().equals(channelUID))
                 .findFirst().orElse(null);
         if (runtime == null) {
@@ -68,12 +65,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             return;
         }
 
-        var value = ModbusBitUtilities.translateCommand2Boolean(command);
-        if (value.isEmpty()) {
-            logger.warn("Cannot convert command {} for channel {} to a coil value", command, channelUID);
-            return;
-        }
-
         ModbusCommunicationInterface localComms = comms;
         ModbusExtEndpointHandler<?> endpoint = getEndpointHandler();
         if (localComms == null || endpoint == null) {
@@ -81,12 +72,74 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             return;
         }
 
-        ModbusWriteCoilRequestBlueprint request = new ModbusWriteCoilRequestBlueprint(endpoint.getSlaveId(),
-                writeStart, value.get(), false, config.maxTries);
-        logger.debug("Writing coil {}={} for channel {}", writeStart, value.get(), channelUID);
-        localComms.submitOneTimeWrite(request,
-                result -> logger.debug("Coil write succeeded for channel {}: {}", channelUID, result),
-                failure -> logger.warn("Coil write failed for channel {}: {}", channelUID, failure));
+        if (THING_TYPE_COIL_POLLER.equals(thing.getThingTypeUID())) {
+            var value = ModbusBitUtilities.translateCommand2Boolean(command);
+            if (value.isEmpty()) {
+                logger.warn("Cannot convert command {} for channel {} to a coil value", command, channelUID);
+                return;
+            }
+            ModbusWriteCoilRequestBlueprint request = new ModbusWriteCoilRequestBlueprint(endpoint.getSlaveId(),
+                    writeStart, value.get(), false, config.maxTries);
+            logger.debug("Writing coil {}={} for channel {}", writeStart, value.get(), channelUID);
+            localComms.submitOneTimeWrite(request,
+                    result -> logger.debug("Coil write succeeded for channel {}: {}", channelUID, result),
+                    failure -> logger.warn("Coil write failed for channel {}: {}", channelUID, failure));
+            return;
+        }
+
+        if (THING_TYPE_HOLDING_POLLER.equals(thing.getThingTypeUID())) {
+            ValueType valueType = runtime.writeValueType();
+            if (valueType == null) {
+                logger.warn("Cannot write channel {} because writeValueType is not configured", channelUID);
+                return;
+            }
+
+            ModbusRegisterArray data;
+            if (valueType == ValueType.BIT) {
+                var value = ModbusBitUtilities.translateCommand2Boolean(command);
+                if (value.isEmpty()) {
+                    logger.warn("Cannot convert command {} for channel {} to a register bit", command, channelUID);
+                    return;
+                }
+                AsyncModbusReadResult cached = lastResult;
+                if (cached == null) {
+                    logger.warn("Cannot write bit for channel {} because holding-register cache is not populated",
+                            channelUID);
+                    return;
+                }
+                var registers = cached.getRegisters();
+                if (registers.isEmpty()) {
+                    logger.warn("Cannot write bit for channel {} because cached result contains no registers", channelUID);
+                    return;
+                }
+                byte[] bytes = registers.get().getBytes();
+                int relative = writeStart - config.start;
+                int bit = runtime.writeSubIndex();
+                int byteIndex = relative * 2 + (bit >= 8 ? 0 : 1);
+                int bitWithinByte = bit % 8;
+                if (value.get()) {
+                    bytes[byteIndex] |= 1 << bitWithinByte;
+                } else {
+                    bytes[byteIndex] &= ~(1 << bitWithinByte);
+                }
+                data = new ModbusRegisterArray(bytes[relative * 2], bytes[relative * 2 + 1]);
+            } else {
+                data = ModbusBitUtilities.commandToRegisters(command, valueType);
+            }
+
+            boolean writeMultiple = data.size() > 1;
+            ModbusWriteRegisterRequestBlueprint request = new ModbusWriteRegisterRequestBlueprint(endpoint.getSlaveId(),
+                    writeStart, data, writeMultiple, config.maxTries);
+            logger.debug("Writing holding register {} as {} for channel {}", writeStart, valueType, channelUID);
+            localComms.submitOneTimeWrite(request, result -> {
+                lastResult = null;
+                lastResultTimestamp = 0;
+                logger.debug("Holding-register write succeeded for channel {}: {}", channelUID, result);
+            }, failure -> logger.warn("Holding-register write failed for channel {}: {}", channelUID, failure));
+            return;
+        }
+
+        logger.debug("Ignoring command {} for {}: this poller is read-only", command, channelUID);
     }
 
     @Override

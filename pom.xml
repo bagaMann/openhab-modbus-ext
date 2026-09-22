@@ -14,7 +14,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
-    <ohc.version>5.2.0</ohc.version>
+    <ohc.version>5.2.1</ohc.version>
+    <karaf.tooling.version>4.4.11</karaf.tooling.version>
     <bnd.version>7.3.0</bnd.version>
   </properties>
 
@@ -96,6 +97,24 @@ Import-Package:   org.eclipse.jdt.annotation.*;resolution:=optional,  org.openha
 -sources: false
           ]]></bnd>
         </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.karaf.tooling</groupId>
+        <artifactId>karaf-maven-plugin</artifactId>
+        <version>${karaf.tooling.version}</version>
+        <executions>
+          <execution>
+            <id>generate-karaf-feature</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>features-generate-descriptor</goal>
+            </goals>
+            <configuration>
+              <aggregateFeatures>true</aggregateFeatures>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
 
       <plugin>

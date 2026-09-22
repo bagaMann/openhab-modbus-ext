@@ -1,8 +1,9 @@
 package org.openhab.binding.modbusext.internal.handler;
 
+import static org.openhab.binding.modbusext.internal.ModbusExtBindingConstants.*;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -22,6 +23,7 @@ import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
+import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
@@ -31,12 +33,6 @@ import org.slf4j.LoggerFactory;
 @NonNullByDefault
 public class ModbusExtPollerHandler extends BaseBridgeHandler
         implements ModbusReadCallback, ModbusFailureCallback<ModbusReadRequestBlueprint> {
-    private static final Map<String, ModbusReadFunctionCode> READ_TYPES = Map.of(
-            "coil", ModbusReadFunctionCode.READ_COILS,
-            "discrete", ModbusReadFunctionCode.READ_INPUT_DISCRETES,
-            "holding", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-            "input", ModbusReadFunctionCode.READ_INPUT_REGISTERS);
-
     private final Logger logger = LoggerFactory.getLogger(ModbusExtPollerHandler.class);
     private volatile @Nullable PollTask pollTask;
     private volatile @Nullable ModbusCommunicationInterface comms;
@@ -59,10 +55,10 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         unregisterPollTask();
         config = getConfigAs(ModbusPollerConfig.class);
 
-        ModbusReadFunctionCode functionCode = READ_TYPES.get(config.type);
+        ModbusReadFunctionCode functionCode = getReadFunctionCode();
         if (functionCode == null) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Unsupported poll type: " + config.type);
+                    "Unsupported poller thing type: " + thing.getThingTypeUID());
             return;
         }
         if (config.start < 0 || config.length < 1) {
@@ -184,6 +180,20 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         }
         ThingHandler handler = parent.getHandler();
         return handler instanceof ModbusExtEndpointHandler<?> endpoint ? endpoint : null;
+    }
+
+    private @Nullable ModbusReadFunctionCode getReadFunctionCode() {
+        ThingTypeUID type = thing.getThingTypeUID();
+        if (THING_TYPE_COIL_POLLER.equals(type)) {
+            return ModbusReadFunctionCode.READ_COILS;
+        } else if (THING_TYPE_DISCRETE_POLLER.equals(type)) {
+            return ModbusReadFunctionCode.READ_INPUT_DISCRETES;
+        } else if (THING_TYPE_HOLDING_POLLER.equals(type)) {
+            return ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS;
+        } else if (THING_TYPE_INPUT_POLLER.equals(type)) {
+            return ModbusReadFunctionCode.READ_INPUT_REGISTERS;
+        }
+        return null;
     }
 
     private boolean isRegisterFunction(ModbusReadFunctionCode code) {

@@ -32,10 +32,12 @@ final class ModbusChannelRuntime {
     private final String itemType;
     private final ModbusExtTransformation readTransformation;
     private final @Nullable Integer writeStart;
+    private final int writeSubIndex;
+    private final @Nullable ValueType writeValueType;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
             int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
-            @Nullable Integer writeStart) {
+            @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -46,6 +48,8 @@ final class ModbusChannelRuntime {
         this.itemType = itemType;
         this.readTransformation = readTransformation;
         this.writeStart = writeStart;
+        this.writeSubIndex = writeSubIndex;
+        this.writeValueType = writeValueType;
     }
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
@@ -104,20 +108,55 @@ final class ModbusChannelRuntime {
         }
 
         Integer writeStart = null;
+        int writeSubIndex = 0;
+        ValueType writeValueType = null;
         if (config.writeStart != null && !config.writeStart.isBlank()) {
+            String[] writeParts = config.writeStart.split("\\.", 2);
             try {
-                writeStart = Integer.valueOf(config.writeStart);
+                writeStart = Integer.valueOf(writeParts[0]);
+                writeSubIndex = writeParts.length == 2 ? Integer.parseInt(writeParts[1]) : 0;
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Invalid writeStart '" + config.writeStart + "'", e);
             }
             if (writeStart < 0) {
                 throw new IllegalArgumentException("writeStart must be >= 0");
             }
+
+            String configuredWriteValueType = config.writeValueType == null ? "" : config.writeValueType.trim();
+            if (!poller.registerPoll()) {
+                if (writeParts.length == 2) {
+                    throw new IllegalArgumentException("X.Y notation is not valid for coil writes");
+                }
+                writeValueType = ValueType.BIT;
+            } else {
+                writeValueType = ValueType.fromConfigValue(configuredWriteValueType);
+                if (writeValueType == null) {
+                    throw new IllegalArgumentException("Invalid writeValueType '" + config.writeValueType + "'");
+                }
+                int writeBits = writeValueType.getBits();
+                if (writeBits < 16 && writeParts.length != 2) {
+                    throw new IllegalArgumentException(
+                            "X.Y is required for bit/int8/uint8 holding-register writes");
+                }
+                if (writeBits >= 16 && writeParts.length == 2) {
+                    throw new IllegalArgumentException(
+                            "X.Y is only valid for holding-register write types smaller than 16 bits");
+                }
+                int itemsPerRegister = 16 / writeBits;
+                if (writeBits < 16 && (writeSubIndex < 0 || writeSubIndex >= itemsPerRegister)) {
+                    throw new IllegalArgumentException("Write sub-index is outside the register");
+                }
+                if (writeValueType == ValueType.BIT
+                        && (writeStart < poller.start() || writeStart >= poller.start() + poller.length())) {
+                    throw new IllegalArgumentException(
+                            "Bit write address must be inside the holding poller range for read-modify-write");
+                }
+            }
         }
 
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(), index,
                 subIndex, valueType, channel.getAcceptedItemType(),
-                new ModbusExtTransformation(List.of(config.readTransform)), writeStart);
+                new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType);
     }
 
     ChannelUID uid() {
@@ -126,6 +165,14 @@ final class ModbusChannelRuntime {
 
     @Nullable Integer writeStart() {
         return writeStart;
+    }
+
+    int writeSubIndex() {
+        return writeSubIndex;
+    }
+
+    @Nullable ValueType writeValueType() {
+        return writeValueType;
     }
 
     State extract(AsyncModbusReadResult result) {

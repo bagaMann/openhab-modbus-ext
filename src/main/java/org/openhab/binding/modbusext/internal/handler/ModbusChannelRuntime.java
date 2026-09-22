@@ -31,9 +31,11 @@ final class ModbusChannelRuntime {
     private final ValueType readValueType;
     private final String itemType;
     private final ModbusExtTransformation readTransformation;
+    private final @Nullable Integer writeStart;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
-            int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation) {
+            int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
+            @Nullable Integer writeStart) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -43,6 +45,7 @@ final class ModbusChannelRuntime {
         this.readValueType = readValueType;
         this.itemType = itemType;
         this.readTransformation = readTransformation;
+        this.writeStart = writeStart;
     }
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
@@ -100,13 +103,29 @@ final class ModbusChannelRuntime {
             throw new IllegalArgumentException("Channel read range is outside the poller range");
         }
 
+        Integer writeStart = null;
+        if (config.writeStart != null && !config.writeStart.isBlank()) {
+            try {
+                writeStart = Integer.valueOf(config.writeStart);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid writeStart '" + config.writeStart + "'", e);
+            }
+            if (writeStart < 0) {
+                throw new IllegalArgumentException("writeStart must be >= 0");
+            }
+        }
+
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(), index,
                 subIndex, valueType, channel.getAcceptedItemType(),
-                new ModbusExtTransformation(List.of(config.readTransform)));
+                new ModbusExtTransformation(List.of(config.readTransform)), writeStart);
     }
 
     ChannelUID uid() {
         return uid;
+    }
+
+    @Nullable Integer writeStart() {
+        return writeStart;
     }
 
     State extract(AsyncModbusReadResult result) {

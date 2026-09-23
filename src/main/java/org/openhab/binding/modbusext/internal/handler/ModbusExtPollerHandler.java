@@ -4,6 +4,7 @@ import static org.openhab.binding.modbusext.internal.ModbusExtBindingConstants.*
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -42,6 +43,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     private volatile @Nullable PollTask pollTask;
     private volatile @Nullable ModbusCommunicationInterface comms;
     private volatile @Nullable AsyncModbusReadResult lastResult;
+    private final AtomicReference<@Nullable ModbusRegisterArray> lastPolledRegisterCache = new AtomicReference<>();
     private volatile long lastResultTimestamp;
     private ModbusPollerConfig config = new ModbusPollerConfig();
     private volatile List<ModbusChannelRuntime> channelRuntimes = List.of();
@@ -101,26 +103,32 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                     logger.warn("Cannot convert command {} for channel {} to a register bit", command, channelUID);
                     return;
                 }
-                AsyncModbusReadResult cached = lastResult;
+                ModbusRegisterArray cached = lastPolledRegisterCache.get();
                 if (cached == null) {
                     logger.warn("Cannot write bit for channel {} because holding-register cache is not populated",
                             channelUID);
                     return;
                 }
-                var registers = cached.getRegisters();
-                if (registers.isEmpty()) {
-                    logger.warn("Cannot write bit for channel {} because cached result contains no registers", channelUID);
-                    return;
-                }
-                byte[] bytes = registers.get().getBytes();
+
                 int relative = writeStart - config.start;
                 int bit = runtime.writeSubIndex();
-                int byteIndex = relative * 2 + (bit >= 8 ? 0 : 1);
-                int bitWithinByte = bit % 8;
-                if (value.get()) {
-                    bytes[byteIndex] |= 1 << bitWithinByte;
-                } else {
-                    bytes[byteIndex] &= ~(1 << bitWithinByte);
+                byte[] bytes;
+                synchronized (lastPolledRegisterCache) {
+                    ModbusRegisterArray current = lastPolledRegisterCache.get();
+                    if (current == null) {
+                        logger.warn("Cannot write bit for channel {} because holding-register cache was invalidated",
+                                channelUID);
+                        return;
+                    }
+                    bytes = current.getBytes();
+                    int byteIndex = relative * 2 + (bit >= 8 ? 0 : 1);
+                    int bitWithinByte = bit % 8;
+                    if (value.get()) {
+                        bytes[byteIndex] |= 1 << bitWithinByte;
+                    } else {
+                        bytes[byteIndex] &= ~(1 << bitWithinByte);
+                    }
+                    lastPolledRegisterCache.set(new ModbusRegisterArray(bytes));
                 }
                 data = new ModbusRegisterArray(bytes[relative * 2], bytes[relative * 2 + 1]);
             } else {
@@ -134,8 +142,14 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             localComms.submitOneTimeWrite(request, result -> {
                 lastResult = null;
                 lastResultTimestamp = 0;
+                if (valueType != ValueType.BIT) {
+                    lastPolledRegisterCache.set(null);
+                }
                 logger.debug("Holding-register write succeeded for channel {}: {}", channelUID, result);
-            }, failure -> logger.warn("Holding-register write failed for channel {}: {}", channelUID, failure));
+            }, failure -> {
+                lastPolledRegisterCache.set(null);
+                logger.warn("Holding-register write failed for channel {}: {}", channelUID, failure);
+            });
             return;
         }
 
@@ -202,6 +216,10 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     public void handle(AsyncModbusReadResult result) {
         lastResult = result;
         lastResultTimestamp = System.currentTimeMillis();
+        if (THING_TYPE_HOLDING_POLLER.equals(thing.getThingTypeUID())) {
+            result.getRegisters().ifPresent(registers ->
+                    lastPolledRegisterCache.set(new ModbusRegisterArray(registers.getBytes())));
+        }
         for (ModbusChannelRuntime runtime : channelRuntimes) {
             updateState(runtime.uid(), runtime.extract(result));
         }
@@ -234,6 +252,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     public synchronized void dispose() {
         unregisterPollTask();
         lastResult = null;
+        lastPolledRegisterCache.set(null);
         channelRuntimes = List.of();
     }
 

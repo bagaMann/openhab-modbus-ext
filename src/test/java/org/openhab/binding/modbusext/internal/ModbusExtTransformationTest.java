@@ -45,7 +45,7 @@ class ModbusExtTransformationTest {
 
     @Test
     void transformedNumericStateCanBecomeStringState() {
-        ModbusExtTransformation transformation = new ModbusExtTransformation(List.of("value=%s"));
+        ModbusExtTransformation transformation = new ModbusExtTransformation(List.of("JS(|'value=' + input)"));
         var transformed = transformation.transformState(List.of(StringType.class), new DecimalType("17"));
         assertEquals(new StringType("value=17"), transformed);
     }

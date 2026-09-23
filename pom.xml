@@ -17,6 +17,7 @@
     <ohc.version>5.2.1</ohc.version>
     <karaf.tooling.version>4.4.11</karaf.tooling.version>
     <bnd.version>7.3.0</bnd.version>
+    <junit.version>5.13.4</junit.version>
   </properties>
 
   <repositories>
@@ -62,6 +63,12 @@
       <version>${ohc.version}</version>
       <type>pom</type>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 

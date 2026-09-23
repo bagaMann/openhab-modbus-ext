@@ -17,6 +17,7 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 
@@ -34,10 +35,12 @@ final class ModbusChannelRuntime {
     private final @Nullable Integer writeStart;
     private final int writeSubIndex;
     private final @Nullable ValueType writeValueType;
+    private final ModbusExtTransformation writeTransformation;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
             int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
-            @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType) {
+            @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType,
+            ModbusExtTransformation writeTransformation) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -50,6 +53,7 @@ final class ModbusChannelRuntime {
         this.writeStart = writeStart;
         this.writeSubIndex = writeSubIndex;
         this.writeValueType = writeValueType;
+        this.writeTransformation = writeTransformation;
     }
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
@@ -156,7 +160,8 @@ final class ModbusChannelRuntime {
 
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(), index,
                 subIndex, valueType, channel.getAcceptedItemType(),
-                new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType);
+                new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType,
+                new ModbusExtTransformation(List.of(config.writeTransform)));
     }
 
     ChannelUID uid() {
@@ -173,6 +178,13 @@ final class ModbusChannelRuntime {
 
     @Nullable ValueType writeValueType() {
         return writeValueType;
+    }
+
+    Optional<Command> transformWriteCommand(Command command) {
+        if (writeTransformation.isIdentityTransform()) {
+            return Optional.of(command);
+        }
+        return ModbusExtTransformation.tryConvertToCommand(writeTransformation.transform(command.toString()));
     }
 
     State extract(AsyncModbusReadResult result) {

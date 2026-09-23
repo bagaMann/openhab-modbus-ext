@@ -235,7 +235,9 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                     lastPolledRegisterCache.set(new ModbusRegisterArray(registers.getBytes())));
         }
         for (ModbusChannelRuntime runtime : channelRuntimes) {
-            updateState(runtime.uid(), runtime.extract(result));
+            if (runtime.hasRead()) {
+                updateState(runtime.uid(), runtime.extract(result));
+            }
         }
         ThingStatusInfo status = thing.getStatusInfo();
         if (status.getStatus() == ThingStatus.OFFLINE

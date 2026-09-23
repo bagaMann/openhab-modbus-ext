@@ -58,15 +58,17 @@ final class ModbusChannelRuntime {
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
         ModbusChannelConfig config = channel.getConfiguration().as(ModbusChannelConfig.class);
-        if (config.readStart == null || config.readStart.isBlank()) {
-            throw new IllegalArgumentException("Channel " + channel.getUID() + " has no readStart");
+        boolean hasRead = config.readStart != null && !config.readStart.isBlank();
+        boolean hasWrite = config.writeStart != null && !config.writeStart.isBlank();
+        if (!hasRead && !hasWrite) {
+            throw new IllegalArgumentException("Channel " + channel.getUID() + " has neither readStart nor writeStart");
         }
 
-        String[] parts = config.readStart.split("\\.", 2);
+        String[] parts = hasRead ? config.readStart.split("\\.", 2) : new String[] { Integer.toString(poller.start()) };
         final int index;
         final int subIndex;
         try {
-            index = Integer.parseInt(parts[0]);
+            index = hasRead ? Integer.parseInt(parts[0]) : poller.start();
             subIndex = parts.length == 2 ? Integer.parseInt(parts[1]) : 0;
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Invalid readStart '" + config.readStart + "'", e);
@@ -74,7 +76,9 @@ final class ModbusChannelRuntime {
 
         String configuredReadValueType = config.readValueType == null ? "" : config.readValueType.trim();
         ValueType valueType;
-        if (!poller.registerPoll() && configuredReadValueType.isBlank()) {
+        if (!hasRead) {
+            valueType = ValueType.BIT;
+        } else if (!poller.registerPoll() && configuredReadValueType.isBlank()) {
             valueType = ValueType.BIT;
         } else {
             valueType = ValueType.fromConfigValue(configuredReadValueType);
@@ -83,14 +87,14 @@ final class ModbusChannelRuntime {
             }
         }
 
-        if (!poller.registerPoll()) {
+        if (hasRead && !poller.registerPoll()) {
             if (valueType != ValueType.BIT) {
                 throw new IllegalArgumentException("Coil/discrete channels only support readValueType=bit");
             }
             if (parts.length == 2) {
                 throw new IllegalArgumentException("X.Y notation is not valid for coil/discrete polls");
             }
-        } else {
+        } else if (hasRead) {
             int bits = valueType.getBits();
             if (bits >= 16 && parts.length == 2) {
                 throw new IllegalArgumentException("X.Y is only valid for value types smaller than 16 bits");
@@ -104,11 +108,13 @@ final class ModbusChannelRuntime {
             }
         }
 
-        int startBit = index * (poller.registerPoll() ? 16 : 1) + subIndex * valueType.getBits();
-        int pollStartBit = poller.start() * (poller.registerPoll() ? 16 : 1);
-        int pollEndBit = (poller.start() + poller.length()) * (poller.registerPoll() ? 16 : 1) - 1;
-        if (startBit < pollStartBit || startBit + valueType.getBits() - 1 > pollEndBit) {
-            throw new IllegalArgumentException("Channel read range is outside the poller range");
+        if (hasRead) {
+            int startBit = index * (poller.registerPoll() ? 16 : 1) + subIndex * valueType.getBits();
+            int pollStartBit = poller.start() * (poller.registerPoll() ? 16 : 1);
+            int pollEndBit = (poller.start() + poller.length()) * (poller.registerPoll() ? 16 : 1) - 1;
+            if (startBit < pollStartBit || startBit + valueType.getBits() - 1 > pollEndBit) {
+                throw new IllegalArgumentException("Channel read range is outside the poller range");
+            }
         }
 
         Integer writeStart = null;
@@ -150,15 +156,16 @@ final class ModbusChannelRuntime {
                 if (writeBits < 16 && (writeSubIndex < 0 || writeSubIndex >= itemsPerRegister)) {
                     throw new IllegalArgumentException("Write sub-index is outside the register");
                 }
-                if (writeValueType == ValueType.BIT
+                if (writeBits < 16
                         && (writeStart < poller.start() || writeStart >= poller.start() + poller.length())) {
                     throw new IllegalArgumentException(
-                            "Bit write address must be inside the holding poller range for read-modify-write");
+                            "Sub-register write address must be inside the holding poller range for read-modify-write");
                 }
             }
         }
 
-        return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(), index,
+        return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(),
+                hasRead ? index : -1,
                 subIndex, valueType, channel.getAcceptedItemType(),
                 new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType,
                 new ModbusExtTransformation(List.of(config.writeTransform)));
@@ -187,7 +194,14 @@ final class ModbusChannelRuntime {
         return ModbusExtTransformation.tryConvertToCommand(writeTransformation.transform(command.toString()));
     }
 
+    boolean hasRead() {
+        return readIndex >= 0;
+    }
+
     State extract(AsyncModbusReadResult result) {
+        if (!hasRead()) {
+            return UnDefType.UNDEF;
+        }
         State numeric;
         if (registerPoll) {
             Optional<ModbusRegisterArray> registers = result.getRegisters();

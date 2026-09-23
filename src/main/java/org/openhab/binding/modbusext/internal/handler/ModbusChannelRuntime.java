@@ -36,11 +36,12 @@ final class ModbusChannelRuntime {
     private final int writeSubIndex;
     private final @Nullable ValueType writeValueType;
     private final ModbusExtTransformation writeTransformation;
+    private final ChannelUpdateTracker updateTracker;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
             int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
             @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType,
-            ModbusExtTransformation writeTransformation) {
+            ModbusExtTransformation writeTransformation, long updateUnchangedValuesEveryMillis) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -54,6 +55,7 @@ final class ModbusChannelRuntime {
         this.writeSubIndex = writeSubIndex;
         this.writeValueType = writeValueType;
         this.writeTransformation = writeTransformation;
+        this.updateTracker = new ChannelUpdateTracker(updateUnchangedValuesEveryMillis);
     }
 
     static ModbusChannelRuntime create(Channel channel, ModbusPollerConfigView poller) {
@@ -168,7 +170,7 @@ final class ModbusChannelRuntime {
                 hasRead ? index : -1,
                 subIndex, valueType, channel.getAcceptedItemType(),
                 new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType,
-                new ModbusExtTransformation(List.of(config.writeTransform)));
+                new ModbusExtTransformation(List.of(config.writeTransform)), config.updateUnchangedValuesEveryMillis);
     }
 
     ChannelUID uid() {
@@ -196,6 +198,10 @@ final class ModbusChannelRuntime {
 
     boolean hasRead() {
         return readIndex >= 0;
+    }
+
+    boolean shouldUpdate(State state, long nowMillis) {
+        return updateTracker.shouldUpdate(state, nowMillis);
     }
 
     State extract(AsyncModbusReadResult result) {

@@ -108,7 +108,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                 }
 
                 int relative = writeStart - config.start;
-                byte[] bytes;
                 synchronized (lastPolledRegisterCache) {
                     ModbusRegisterArray current = lastPolledRegisterCache.get();
                     if (current == null) {
@@ -116,8 +115,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                                 valueType, channelUID);
                         return;
                     }
-                    bytes = current.getBytes();
-
                     if (valueType == ValueType.BIT) {
                         var value = ModbusBitUtilities.translateCommand2Boolean(command);
                         if (value.isEmpty()) {
@@ -125,24 +122,17 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                                     channelUID);
                             return;
                         }
-                        int bit = runtime.writeSubIndex();
-                        int byteIndex = relative * 2 + (bit >= 8 ? 0 : 1);
-                        int bitWithinByte = bit % 8;
-                        if (value.get()) {
-                            bytes[byteIndex] |= 1 << bitWithinByte;
-                        } else {
-                            bytes[byteIndex] &= ~(1 << bitWithinByte);
-                        }
+                        current = HoldingRegisterRmw.writeBit(current, relative, runtime.writeSubIndex(), value.get());
                     } else {
                         ModbusRegisterArray commandData = ModbusBitUtilities.commandToRegisters(command, valueType);
                         byte[] commandBytes = commandData.getBytes();
-                        int byteIndex = relative * 2 + (runtime.writeSubIndex() == 0 ? 1 : 0);
-                        bytes[byteIndex] = commandBytes[commandBytes.length - 1];
+                        current = HoldingRegisterRmw.writeByte(current, relative, runtime.writeSubIndex(),
+                                commandBytes[commandBytes.length - 1]);
                     }
 
-                    lastPolledRegisterCache.set(new ModbusRegisterArray(bytes));
+                    lastPolledRegisterCache.set(current);
+                    data = HoldingRegisterRmw.singleRegister(current, relative);
                 }
-                data = new ModbusRegisterArray(bytes[relative * 2], bytes[relative * 2 + 1]);
             } else {
                 data = ModbusBitUtilities.commandToRegisters(command, valueType);
             }

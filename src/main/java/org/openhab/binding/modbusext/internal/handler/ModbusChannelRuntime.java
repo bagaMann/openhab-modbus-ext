@@ -15,6 +15,7 @@ import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
+import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.types.Command;
@@ -229,6 +230,7 @@ final class ModbusChannelRuntime {
                 case "Switch" -> OnOffType.from(boolValue);
                 case "Contact" -> boolValue ? OpenClosedType.OPEN : OpenClosedType.CLOSED;
                 case "Number" -> numeric;
+                case "String" -> new StringType(numeric.toString());
                 default -> numeric;
             };
         }
@@ -236,6 +238,7 @@ final class ModbusChannelRuntime {
             case "Switch" -> List.of(OnOffType.class);
             case "Contact" -> List.of(OpenClosedType.class);
             case "Number" -> List.of(DecimalType.class);
+            case "String" -> List.of(StringType.class);
             default -> List.of(DecimalType.class);
         };
         State transformed = readTransformation.transformState(accepted, numeric);

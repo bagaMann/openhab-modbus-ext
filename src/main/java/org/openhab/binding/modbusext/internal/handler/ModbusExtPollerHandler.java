@@ -67,6 +67,18 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             return;
         }
 
+        var transformedCommand = runtime.transformWriteCommand(command);
+        if (transformedCommand.isEmpty()) {
+            logger.warn("Cannot process command {} for channel {} because write transformation was unsuccessful",
+                    command, channelUID);
+            return;
+        }
+        Command writeCommand = transformedCommand.get();
+        if (writeCommand != command) {
+            logger.trace("Write transformation for channel {} converted '{}' to '{}'", channelUID, command,
+                    writeCommand);
+        }
+
         ModbusCommunicationInterface localComms = comms;
         ModbusExtEndpointHandler<?> endpoint = getEndpointHandler();
         if (localComms == null || endpoint == null) {
@@ -75,7 +87,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         }
 
         if (THING_TYPE_COIL_POLLER.equals(thing.getThingTypeUID())) {
-            var value = ModbusBitUtilities.translateCommand2Boolean(command);
+            var value = ModbusBitUtilities.translateCommand2Boolean(writeCommand);
             if (value.isEmpty()) {
                 logger.warn("Cannot convert command {} for channel {} to a coil value", command, channelUID);
                 return;
@@ -116,7 +128,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                         return;
                     }
                     if (valueType == ValueType.BIT) {
-                        var value = ModbusBitUtilities.translateCommand2Boolean(command);
+                        var value = ModbusBitUtilities.translateCommand2Boolean(writeCommand);
                         if (value.isEmpty()) {
                             logger.warn("Cannot convert command {} for channel {} to a register bit", command,
                                     channelUID);
@@ -124,7 +136,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                         }
                         current = HoldingRegisterRmw.writeBit(current, relative, runtime.writeSubIndex(), value.get());
                     } else {
-                        ModbusRegisterArray commandData = ModbusBitUtilities.commandToRegisters(command, valueType);
+                        ModbusRegisterArray commandData = ModbusBitUtilities.commandToRegisters(writeCommand, valueType);
                         byte[] commandBytes = commandData.getBytes();
                         current = HoldingRegisterRmw.writeByte(current, relative, runtime.writeSubIndex(),
                                 commandBytes[commandBytes.length - 1]);
@@ -134,7 +146,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                     data = HoldingRegisterRmw.singleRegister(current, relative);
                 }
             } else {
-                data = ModbusBitUtilities.commandToRegisters(command, valueType);
+                data = ModbusBitUtilities.commandToRegisters(writeCommand, valueType);
             }
 
             boolean writeMultiple = data.size() > 1;

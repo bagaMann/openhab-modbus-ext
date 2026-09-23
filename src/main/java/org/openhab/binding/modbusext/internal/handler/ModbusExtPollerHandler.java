@@ -238,9 +238,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         for (ModbusChannelRuntime runtime : channelRuntimes) {
             if (runtime.hasRead()) {
                 var state = runtime.extract(result);
-                boolean publish = runtime.shouldUpdate(state, nowMillis);
-                logger.trace("Channel {} state {} publish {}", runtime.uid(), state, publish);
-                if (publish) {
+                if (runtime.shouldUpdate(state, nowMillis)) {
                     updateState(runtime.uid(), state);
                 }
             }

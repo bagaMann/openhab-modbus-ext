@@ -127,6 +127,13 @@ Import-Package:   org.eclipse.jdt.annotation.*;resolution:=optional,  org.openha
               <aggregateFeatures>true</aggregateFeatures>
             </configuration>
           </execution>
+          <execution>
+            <id>build-kar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>kar</goal>
+            </goals>
+          </execution>
         </executions>
       </plugin>
 

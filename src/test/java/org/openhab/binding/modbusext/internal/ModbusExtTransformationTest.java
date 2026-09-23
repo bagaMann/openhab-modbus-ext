@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
+import org.openhab.core.library.types.StringType;
 
 class ModbusExtTransformationTest {
     @Test
@@ -40,6 +41,13 @@ class ModbusExtTransformationTest {
         var command = ModbusExtTransformation.tryConvertToCommand("OPEN");
         assertTrue(command.isPresent());
         assertSame(OpenClosedType.OPEN, command.get());
+    }
+
+    @Test
+    void transformedNumericStateCanBecomeStringState() {
+        ModbusExtTransformation transformation = new ModbusExtTransformation(List.of("value=%s"));
+        var transformed = transformation.transformState(List.of(StringType.class), new DecimalType("17"));
+        assertEquals(new StringType("value=17"), transformed);
     }
 
     @Test

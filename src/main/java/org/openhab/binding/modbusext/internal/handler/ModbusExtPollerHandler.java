@@ -97,37 +97,49 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             }
 
             ModbusRegisterArray data;
-            if (valueType == ValueType.BIT) {
-                var value = ModbusBitUtilities.translateCommand2Boolean(command);
-                if (value.isEmpty()) {
-                    logger.warn("Cannot convert command {} for channel {} to a register bit", command, channelUID);
-                    return;
-                }
+            boolean readModifyWrite = valueType == ValueType.BIT || valueType == ValueType.INT8
+                    || valueType == ValueType.UINT8;
+            if (readModifyWrite) {
                 ModbusRegisterArray cached = lastPolledRegisterCache.get();
                 if (cached == null) {
-                    logger.warn("Cannot write bit for channel {} because holding-register cache is not populated",
-                            channelUID);
+                    logger.warn("Cannot write {} for channel {} because holding-register cache is not populated",
+                            valueType, channelUID);
                     return;
                 }
 
                 int relative = writeStart - config.start;
-                int bit = runtime.writeSubIndex();
                 byte[] bytes;
                 synchronized (lastPolledRegisterCache) {
                     ModbusRegisterArray current = lastPolledRegisterCache.get();
                     if (current == null) {
-                        logger.warn("Cannot write bit for channel {} because holding-register cache was invalidated",
-                                channelUID);
+                        logger.warn("Cannot write {} for channel {} because holding-register cache was invalidated",
+                                valueType, channelUID);
                         return;
                     }
                     bytes = current.getBytes();
-                    int byteIndex = relative * 2 + (bit >= 8 ? 0 : 1);
-                    int bitWithinByte = bit % 8;
-                    if (value.get()) {
-                        bytes[byteIndex] |= 1 << bitWithinByte;
+
+                    if (valueType == ValueType.BIT) {
+                        var value = ModbusBitUtilities.translateCommand2Boolean(command);
+                        if (value.isEmpty()) {
+                            logger.warn("Cannot convert command {} for channel {} to a register bit", command,
+                                    channelUID);
+                            return;
+                        }
+                        int bit = runtime.writeSubIndex();
+                        int byteIndex = relative * 2 + (bit >= 8 ? 0 : 1);
+                        int bitWithinByte = bit % 8;
+                        if (value.get()) {
+                            bytes[byteIndex] |= 1 << bitWithinByte;
+                        } else {
+                            bytes[byteIndex] &= ~(1 << bitWithinByte);
+                        }
                     } else {
-                        bytes[byteIndex] &= ~(1 << bitWithinByte);
+                        ModbusRegisterArray commandData = ModbusBitUtilities.commandToRegisters(command, valueType);
+                        byte[] commandBytes = commandData.getBytes();
+                        int byteIndex = relative * 2 + (runtime.writeSubIndex() == 0 ? 1 : 0);
+                        bytes[byteIndex] = commandBytes[commandBytes.length - 1];
                     }
+
                     lastPolledRegisterCache.set(new ModbusRegisterArray(bytes));
                 }
                 data = new ModbusRegisterArray(bytes[relative * 2], bytes[relative * 2 + 1]);
@@ -142,7 +154,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             localComms.submitOneTimeWrite(request, result -> {
                 lastResult = null;
                 lastResultTimestamp = 0;
-                if (valueType != ValueType.BIT) {
+                if (!readModifyWrite) {
                     lastPolledRegisterCache.set(null);
                 }
                 logger.debug("Holding-register write succeeded for channel {}: {}", channelUID, result);

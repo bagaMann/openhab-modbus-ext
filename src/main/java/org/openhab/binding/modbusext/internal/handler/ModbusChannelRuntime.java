@@ -41,6 +41,7 @@ final class ModbusChannelRuntime {
     private final ModbusExtTransformation writeTransformation;
     private final String writeMode;
     private final long pulseDurationMillis;
+    private final PulseWriteController pulseController = new PulseWriteController();
     private final ChannelUpdateTracker updateTracker;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
@@ -155,21 +156,17 @@ final class ModbusChannelRuntime {
                 }
                 int writeBits = writeValueType.getBits();
                 if (writeBits < 16 && writeParts.length != 2) {
-                    throw new IllegalArgumentException(
-                            "X.Y is required for bit/int8/uint8 holding-register writes");
+                    throw new IllegalArgumentException("X.Y is required for bit/int8/uint8 holding-register writes");
                 }
                 if (writeBits >= 16 && writeParts.length == 2) {
-                    throw new IllegalArgumentException(
-                            "X.Y is only valid for holding-register write types smaller than 16 bits");
+                    throw new IllegalArgumentException("X.Y is only valid for holding-register write types smaller than 16 bits");
                 }
                 int itemsPerRegister = 16 / writeBits;
                 if (writeBits < 16 && (writeSubIndex < 0 || writeSubIndex >= itemsPerRegister)) {
                     throw new IllegalArgumentException("Write sub-index is outside the register");
                 }
-                if (writeBits < 16
-                        && (writeStart < poller.start() || writeStart >= poller.start() + poller.length())) {
-                    throw new IllegalArgumentException(
-                            "Sub-register write address must be inside the holding poller range for read-modify-write");
+                if (writeBits < 16 && (writeStart < poller.start() || writeStart >= poller.start() + poller.length())) {
+                    throw new IllegalArgumentException("Sub-register write address must be inside the holding poller range for read-modify-write");
                 }
             }
         }
@@ -200,63 +197,33 @@ final class ModbusChannelRuntime {
                 config.updateUnchangedValuesEveryMillis);
     }
 
-    ChannelUID uid() {
-        return uid;
-    }
-
-    @Nullable Integer writeStart() {
-        return writeStart;
-    }
-
-    int writeSubIndex() {
-        return writeSubIndex;
-    }
-
-    @Nullable ValueType writeValueType() {
-        return writeValueType;
-    }
-
-    boolean isPulseMode() {
-        return writeMode.equals("pulse");
-    }
-
-    long pulseDurationMillis() {
-        return pulseDurationMillis;
-    }
+    ChannelUID uid() { return uid; }
+    @Nullable Integer writeStart() { return writeStart; }
+    int writeSubIndex() { return writeSubIndex; }
+    @Nullable ValueType writeValueType() { return writeValueType; }
+    boolean isPulseMode() { return writeMode.equals("pulse"); }
+    long pulseDurationMillis() { return pulseDurationMillis; }
+    boolean tryBeginPulse(boolean feedback, boolean requested) { return pulseController.tryBegin(feedback, requested); }
+    void finishPulse() { pulseController.finish(); }
 
     Optional<Command> transformWriteCommand(Command command) {
-        if (writeTransformation.isIdentityTransform()) {
-            return Optional.of(command);
-        }
+        if (writeTransformation.isIdentityTransform()) return Optional.of(command);
         return ModbusExtTransformation.tryConvertToCommand(writeTransformation.transform(command.toString()));
     }
 
     Optional<Boolean> extractFeedbackBoolean(AsyncModbusReadResult result) {
-        if (!hasRead()) {
-            return Optional.empty();
-        }
+        if (!hasRead()) return Optional.empty();
         State state = extract(result);
-        if (state instanceof OnOffType onOff) {
-            return Optional.of(onOff == OnOffType.ON);
-        }
-        if (state instanceof DecimalType decimal) {
-            return Optional.of(!DecimalType.ZERO.equals(decimal));
-        }
+        if (state instanceof OnOffType onOff) return Optional.of(onOff == OnOffType.ON);
+        if (state instanceof DecimalType decimal) return Optional.of(!DecimalType.ZERO.equals(decimal));
         return Optional.empty();
     }
 
-    boolean hasRead() {
-        return readIndex >= 0;
-    }
-
-    boolean shouldUpdate(State state, long nowMillis) {
-        return updateTracker.shouldUpdate(state, nowMillis);
-    }
+    boolean hasRead() { return readIndex >= 0; }
+    boolean shouldUpdate(State state, long nowMillis) { return updateTracker.shouldUpdate(state, nowMillis); }
 
     State extract(AsyncModbusReadResult result) {
-        if (!hasRead()) {
-            return UnDefType.UNDEF;
-        }
+        if (!hasRead()) return UnDefType.UNDEF;
         State numeric;
         if (registerPoll) {
             Optional<ModbusRegisterArray> registers = result.getRegisters();
@@ -269,9 +236,7 @@ final class ModbusChannelRuntime {
     }
 
     private State adaptToItemType(State numeric) {
-        if (numeric == UnDefType.UNDEF) {
-            return numeric;
-        }
+        if (numeric == UnDefType.UNDEF) return numeric;
         boolean boolValue = !DecimalType.ZERO.equals(numeric);
         if (readTransformation.isIdentityTransform()) {
             return switch (itemType) {
@@ -299,27 +264,20 @@ final class ModbusChannelRuntime {
 
     private State toPercentType(State numeric) {
         if (numeric instanceof DecimalType decimal) {
-            try {
-                return new PercentType(decimal.toBigDecimal());
-            } catch (IllegalArgumentException e) {
-                return UnDefType.UNDEF;
-            }
+            try { return new PercentType(decimal.toBigDecimal()); } catch (IllegalArgumentException e) { return UnDefType.UNDEF; }
         }
         return UnDefType.UNDEF;
     }
 
     private State extractRegisters(ModbusRegisterArray registers) {
         int bits = readValueType.getBits();
-        int extractIndex = bits >= 16 ? readIndex - pollStart
-                : (readIndex - pollStart) * (16 / bits) + readSubIndex;
-        return ModbusBitUtilities.extractStateFromRegisters(registers, extractIndex, readValueType)
-                .<State>map(v -> v).orElse(UnDefType.UNDEF);
+        int extractIndex = bits >= 16 ? readIndex - pollStart : (readIndex - pollStart) * (16 / bits) + readSubIndex;
+        return ModbusBitUtilities.extractStateFromRegisters(registers, extractIndex, readValueType).<State>map(v -> v).orElse(UnDefType.UNDEF);
     }
 
     private State extractBits(BitArray bits) {
         return bits.getBit(readIndex - pollStart) ? new DecimalType(java.math.BigDecimal.ONE) : DecimalType.ZERO;
     }
 
-    record ModbusPollerConfigView(int start, int length, boolean registerPoll) {
-    }
+    record ModbusPollerConfigView(int start, int length, boolean registerPoll) {}
 }

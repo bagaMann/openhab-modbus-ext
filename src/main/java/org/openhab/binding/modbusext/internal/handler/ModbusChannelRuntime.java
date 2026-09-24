@@ -12,6 +12,7 @@ import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
@@ -233,6 +234,7 @@ final class ModbusChannelRuntime {
                 case "Number" -> numeric;
                 case "String" -> new StringType(numeric.toString());
                 case "Dimmer", "Rollershutter" -> toPercentType(numeric);
+                case "DateTime" -> UnDefType.UNDEF;
                 default -> numeric;
             };
         }
@@ -242,6 +244,7 @@ final class ModbusChannelRuntime {
             case "Number" -> List.of(DecimalType.class);
             case "String" -> List.of(StringType.class);
             case "Dimmer", "Rollershutter" -> List.of(PercentType.class);
+            case "DateTime" -> List.of(DateTimeType.class);
             default -> List.of(DecimalType.class);
         };
         State transformed = readTransformation.transformState(accepted, numeric);

@@ -15,6 +15,7 @@ import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
@@ -231,6 +232,7 @@ final class ModbusChannelRuntime {
                 case "Contact" -> boolValue ? OpenClosedType.OPEN : OpenClosedType.CLOSED;
                 case "Number" -> numeric;
                 case "String" -> new StringType(numeric.toString());
+                case "Dimmer" -> toPercentType(numeric);
                 default -> numeric;
             };
         }
@@ -239,10 +241,22 @@ final class ModbusChannelRuntime {
             case "Contact" -> List.of(OpenClosedType.class);
             case "Number" -> List.of(DecimalType.class);
             case "String" -> List.of(StringType.class);
+            case "Dimmer" -> List.of(PercentType.class);
             default -> List.of(DecimalType.class);
         };
         State transformed = readTransformation.transformState(accepted, numeric);
         return transformed != null ? transformed : UnDefType.UNDEF;
+    }
+
+    private State toPercentType(State numeric) {
+        if (numeric instanceof DecimalType decimal) {
+            try {
+                return new PercentType(decimal.toBigDecimal());
+            } catch (IllegalArgumentException e) {
+                return UnDefType.UNDEF;
+            }
+        }
+        return UnDefType.UNDEF;
     }
 
     private State extractRegisters(ModbusRegisterArray registers) {

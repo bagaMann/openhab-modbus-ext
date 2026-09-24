@@ -39,12 +39,15 @@ final class ModbusChannelRuntime {
     private final int writeSubIndex;
     private final @Nullable ValueType writeValueType;
     private final ModbusExtTransformation writeTransformation;
+    private final String writeMode;
+    private final long pulseDurationMillis;
     private final ChannelUpdateTracker updateTracker;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
             int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
             @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType,
-            ModbusExtTransformation writeTransformation, long updateUnchangedValuesEveryMillis) {
+            ModbusExtTransformation writeTransformation, String writeMode, long pulseDurationMillis,
+            long updateUnchangedValuesEveryMillis) {
         this.uid = uid;
         this.pollStart = pollStart;
         this.pollLength = pollLength;
@@ -58,6 +61,8 @@ final class ModbusChannelRuntime {
         this.writeSubIndex = writeSubIndex;
         this.writeValueType = writeValueType;
         this.writeTransformation = writeTransformation;
+        this.writeMode = writeMode;
+        this.pulseDurationMillis = pulseDurationMillis;
         this.updateTracker = new ChannelUpdateTracker(updateUnchangedValuesEveryMillis);
     }
 
@@ -169,11 +174,30 @@ final class ModbusChannelRuntime {
             }
         }
 
+        String writeMode = config.writeMode == null ? "direct" : config.writeMode.trim().toLowerCase();
+        if (!writeMode.equals("direct") && !writeMode.equals("pulse")) {
+            throw new IllegalArgumentException("Invalid writeMode '" + config.writeMode + "'");
+        }
+        if (writeMode.equals("pulse")) {
+            if (!poller.registerPoll()) {
+                throw new IllegalArgumentException("Pulse mode currently supports holding-register pollers only");
+            }
+            if (!hasRead || !hasWrite) {
+                throw new IllegalArgumentException("Pulse mode requires both readStart and writeStart");
+            }
+            if (valueType != ValueType.BIT || writeValueType != ValueType.BIT) {
+                throw new IllegalArgumentException("Pulse mode currently requires readValueType=bit and writeValueType=bit");
+            }
+            if (config.pulseDurationMillis < 50 || config.pulseDurationMillis > 5000) {
+                throw new IllegalArgumentException("pulseDurationMillis must be between 50 and 5000 ms");
+            }
+        }
+
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(),
-                hasRead ? index : -1,
-                subIndex, valueType, channel.getAcceptedItemType(),
+                hasRead ? index : -1, subIndex, valueType, channel.getAcceptedItemType(),
                 new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType,
-                new ModbusExtTransformation(List.of(config.writeTransform)), config.updateUnchangedValuesEveryMillis);
+                new ModbusExtTransformation(List.of(config.writeTransform)), writeMode, config.pulseDurationMillis,
+                config.updateUnchangedValuesEveryMillis);
     }
 
     ChannelUID uid() {
@@ -192,11 +216,33 @@ final class ModbusChannelRuntime {
         return writeValueType;
     }
 
+    boolean isPulseMode() {
+        return writeMode.equals("pulse");
+    }
+
+    long pulseDurationMillis() {
+        return pulseDurationMillis;
+    }
+
     Optional<Command> transformWriteCommand(Command command) {
         if (writeTransformation.isIdentityTransform()) {
             return Optional.of(command);
         }
         return ModbusExtTransformation.tryConvertToCommand(writeTransformation.transform(command.toString()));
+    }
+
+    Optional<Boolean> extractFeedbackBoolean(AsyncModbusReadResult result) {
+        if (!hasRead()) {
+            return Optional.empty();
+        }
+        State state = extract(result);
+        if (state instanceof OnOffType onOff) {
+            return Optional.of(onOff == OnOffType.ON);
+        }
+        if (state instanceof DecimalType decimal) {
+            return Optional.of(!DecimalType.ZERO.equals(decimal));
+        }
+        return Optional.empty();
     }
 
     boolean hasRead() {

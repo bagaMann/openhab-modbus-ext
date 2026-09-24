@@ -25,4 +25,21 @@ class PulseWriteControllerTest {
     void doesNothingWhenFeedbackAlreadyOff() {
         assertFalse(PulseWriteController.shouldPulse(false, false));
     }
+
+    @Test
+    void rejectsSecondPulseWhileFirstIsActive() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.tryBegin(false, true));
+        assertTrue(controller.isActive());
+        assertFalse(controller.tryBegin(false, true));
+    }
+
+    @Test
+    void allowsNewPulseAfterPreviousPulseFinishes() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.tryBegin(false, true));
+        controller.finish();
+        assertFalse(controller.isActive());
+        assertTrue(controller.tryBegin(true, false));
+    }
 }

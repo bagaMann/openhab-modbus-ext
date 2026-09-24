@@ -1,7 +1,6 @@
 package org.openhab.binding.modbusext.internal.config;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.eclipse.jdt.annotation.Nullable;
 
 @NonNullByDefault
 public class ModbusChannelConfig {
@@ -13,6 +12,8 @@ public class ModbusChannelConfig {
     public String writeValueType = "uint16";
     public String writeType = "holding";
     public String writeTransform = "default";
+    public String writeMode = "direct";
+    public long pulseDurationMillis = 200;
 
     public long updateUnchangedValuesEveryMillis = 1000;
 
@@ -28,6 +29,6 @@ public class ModbusChannelConfig {
     public String toString() {
         return "ModbusChannelConfig{readStart='" + readStart + "', readValueType='" + readValueType
                 + "', writeStart='" + writeStart + "', writeValueType='" + writeValueType + "', writeType='"
-                + writeType + "'}";
+                + writeType + "', writeMode='" + writeMode + "', pulseDurationMillis=" + pulseDurationMillis + "}";
     }
 }

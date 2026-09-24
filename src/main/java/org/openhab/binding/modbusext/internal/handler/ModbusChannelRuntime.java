@@ -232,7 +232,7 @@ final class ModbusChannelRuntime {
                 case "Contact" -> boolValue ? OpenClosedType.OPEN : OpenClosedType.CLOSED;
                 case "Number" -> numeric;
                 case "String" -> new StringType(numeric.toString());
-                case "Dimmer" -> toPercentType(numeric);
+                case "Dimmer", "Rollershutter" -> toPercentType(numeric);
                 default -> numeric;
             };
         }
@@ -241,7 +241,7 @@ final class ModbusChannelRuntime {
             case "Contact" -> List.of(OpenClosedType.class);
             case "Number" -> List.of(DecimalType.class);
             case "String" -> List.of(StringType.class);
-            case "Dimmer" -> List.of(PercentType.class);
+            case "Dimmer", "Rollershutter" -> List.of(PercentType.class);
             default -> List.of(DecimalType.class);
         };
         State transformed = readTransformation.transformState(accepted, numeric);

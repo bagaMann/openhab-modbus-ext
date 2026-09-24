@@ -58,6 +58,8 @@
             <option value="int64_swap">int64_swap</option><option value="uint64_swap">uint64_swap</option>
         </options><limitToOptions>true</limitToOptions></parameter>
         <parameter name="writeTransform" type="text"><label>Write Transform</label><default>default</default><advanced>true</advanced></parameter>
+        <parameter name="writeMode" type="text" required="true"><label>Write Mode</label><description>Direct writes the requested value. Pulse momentarily activates the configured output when the requested logical state differs from feedback.</description><default>direct</default><options><option value="direct">Direct</option><option value="pulse">Pulse</option></options><limitToOptions>true</limitToOptions></parameter>
+        <parameter name="pulseDurationMillis" type="integer" unit="ms" min="50" max="5000"><label>Pulse Duration</label><description>Duration of the active output in Pulse mode.</description><default>200</default></parameter>
         <parameter name="updateUnchangedValuesEveryMillis" type="integer" unit="ms" min="0"><label>Update Unchanged Values</label><default>1000</default><advanced>true</advanced></parameter>
     </config-description>
 </config:config-descriptions>

@@ -8,7 +8,6 @@
   <artifactId>org.openhab.binding.modbusext</artifactId>
   <version>0.2.0</version>
   <packaging>jar</packaging>
-
   <name>openHAB Modbus Ext Binding</name>
 
   <properties>
@@ -21,42 +20,102 @@
   </properties>
 
   <repositories>
-    <repository><id>openhab-release</id><name>openHAB Release Repository</name><url>https://openhab.jfrog.io/artifactory/libs-release</url><releases><enabled>true</enabled></releases><snapshots><enabled>false</enabled></snapshots></repository>
+    <repository>
+      <id>openhab-release</id><name>openHAB Release Repository</name>
+      <url>https://openhab.jfrog.io/artifactory/libs-release</url>
+      <releases><enabled>true</enabled></releases><snapshots><enabled>false</enabled></snapshots>
+    </repository>
   </repositories>
 
-  <dependencyManagement><dependencies>
-    <dependency><groupId>org.openhab.core.bom</groupId><artifactId>org.openhab.core.bom.compile</artifactId><version>${ohc.version}</version><type>pom</type><scope>import</scope></dependency>
-    <dependency><groupId>org.openhab.core.bom</groupId><artifactId>org.openhab.core.bom.openhab-core</artifactId><version>${ohc.version}</version><type>pom</type><scope>import</scope></dependency>
-  </dependencies></dependencyManagement>
+  <!--
+    openHAB is the host runtime.  Its API/BOM is needed to compile this bundle,
+    but it must never be embedded in, nor provisioned by, our KAR.  The target
+    openHAB installation supplies Core and the Modbus transport.
+  -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.openhab.core.bom</groupId>
+        <artifactId>org.openhab.core.bom.compile</artifactId>
+        <version>${ohc.version}</version><type>pom</type><scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.openhab.core.bom</groupId>
+        <artifactId>org.openhab.core.bom.openhab-core</artifactId>
+        <version>${ohc.version}</version><type>pom</type><scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
-    <dependency><groupId>org.openhab.core.bom</groupId><artifactId>org.openhab.core.bom.compile</artifactId><version>${ohc.version}</version><type>pom</type><scope>provided</scope></dependency>
-    <dependency><groupId>org.openhab.core.bom</groupId><artifactId>org.openhab.core.bom.openhab-core</artifactId><version>${ohc.version}</version><type>pom</type><scope>provided</scope></dependency>
-    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.version}</version><scope>test</scope></dependency>
+    <!-- Compile against the openHAB API only. Provided dependencies are supplied by the host runtime. -->
+    <dependency>
+      <groupId>org.openhab.core.bom</groupId>
+      <artifactId>org.openhab.core.bom.compile</artifactId>
+      <version>${ohc.version}</version><type>pom</type><scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openhab.core.bom</groupId>
+      <artifactId>org.openhab.core.bom.openhab-core</artifactId>
+      <version>${ohc.version}</version><type>pom</type><scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version><scope>test</scope>
+    </dependency>
   </dependencies>
 
-  <build><plugins>
-    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.4</version></plugin>
-    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version><configuration><release>${maven.compiler.release}</release></configuration></plugin>
-    <plugin>
-      <groupId>biz.aQute.bnd</groupId><artifactId>bnd-maven-plugin</artifactId><version>${bnd.version}</version>
-      <executions><execution><goals><goal>bnd-process</goal></goals></execution></executions>
-      <configuration><bnd><![CDATA[
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.4</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version>
+        <configuration><release>${maven.compiler.release}</release></configuration>
+      </plugin>
+      <plugin>
+        <groupId>biz.aQute.bnd</groupId><artifactId>bnd-maven-plugin</artifactId><version>${bnd.version}</version>
+        <executions><execution><goals><goal>bnd-process</goal></goals></execution></executions>
+        <configuration><bnd><![CDATA[
 Bundle-SymbolicName: org.openhab.binding.modbusext
 Automatic-Module-Name: org.openhab.binding.modbusext
-Import-Package:   org.eclipse.jdt.annotation.*;resolution:=optional,  org.openhab.*;version=!,  *
+Import-Package: org.eclipse.jdt.annotation.*;resolution:=optional,org.openhab.*;version=!,*
 -exportcontents: !*.internal.*,org.openhab.*
 -noimportjava: true
 -sources: false
-      ]]></bnd></configuration>
-    </plugin>
-    <plugin>
-      <groupId>org.apache.karaf.tooling</groupId><artifactId>karaf-maven-plugin</artifactId><version>${karaf.tooling.version}</version>
-      <executions>
-        <execution><id>generate-karaf-feature</id><phase>generate-resources</phase><goals><goal>features-generate-descriptor</goal></goals><configuration><aggregateFeatures>true</aggregateFeatures></configuration></execution>
-        <execution><id>build-kar</id><phase>package</phase><goals><goal>kar</goal></goals></execution>
-      </executions>
-    </plugin>
-    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><configuration><archive><manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile></archive></configuration></plugin>
-  </plugins></build>
+        ]]></bnd></configuration>
+      </plugin>
+
+      <!--
+        Generate a deliberately minimal Karaf feature.  dependencyReducedPom=true
+        prevents the tooling from turning the compile-time openHAB BOM into a
+        transitive runtime feature (which previously tried to install Core 5.2.1
+        and its Netty stack on an openHAB 5.0.3 host).
+      -->
+      <plugin>
+        <groupId>org.apache.karaf.tooling</groupId><artifactId>karaf-maven-plugin</artifactId><version>${karaf.tooling.version}</version>
+        <configuration>
+          <aggregateFeatures>false</aggregateFeatures>
+          <includeTransitiveDependency>false</includeTransitiveDependency>
+          <startLevel>80</startLevel>
+        </configuration>
+        <executions>
+          <execution>
+            <id>generate-karaf-feature</id><phase>generate-resources</phase>
+            <goals><goal>features-generate-descriptor</goal></goals>
+            <configuration>
+              <aggregateFeatures>false</aggregateFeatures>
+              <includeTransitiveDependency>false</includeTransitiveDependency>
+            </configuration>
+          </execution>
+          <execution><id>build-kar</id><phase>package</phase><goals><goal>kar</goal></goals></execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version>
+        <configuration><archive><manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile></archive></configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>

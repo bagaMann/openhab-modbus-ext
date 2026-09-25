@@ -27,11 +27,6 @@
     </repository>
   </repositories>
 
-  <!--
-    openHAB is the host runtime.  Its API/BOM is needed to compile this bundle,
-    but it must never be embedded in, nor provisioned by, our KAR.  The target
-    openHAB installation supplies Core and the Modbus transport.
-  -->
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -48,7 +43,6 @@
   </dependencyManagement>
 
   <dependencies>
-    <!-- Compile against the openHAB API only. Provided dependencies are supplied by the host runtime. -->
     <dependency>
       <groupId>org.openhab.core.bom</groupId>
       <artifactId>org.openhab.core.bom.compile</artifactId>
@@ -87,28 +81,30 @@ Import-Package: org.eclipse.jdt.annotation.*;resolution:=optional,org.openhab.*;
         ]]></bnd></configuration>
       </plugin>
 
-      <!--
-        Generate a deliberately minimal Karaf feature.  dependencyReducedPom=true
-        prevents the tooling from turning the compile-time openHAB BOM into a
-        transitive runtime feature (which previously tried to install Core 5.2.1
-        and its Netty stack on an openHAB 5.0.3 host).
-      -->
+      <!-- Copy our hand-written, runtime-neutral Karaf feature descriptor. -->
       <plugin>
-        <groupId>org.apache.karaf.tooling</groupId><artifactId>karaf-maven-plugin</artifactId><version>${karaf.tooling.version}</version>
-        <configuration>
-          <aggregateFeatures>false</aggregateFeatures>
-          <includeTransitiveDependency>false</includeTransitiveDependency>
-          <startLevel>80</startLevel>
-        </configuration>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.3.1</version>
         <executions>
           <execution>
-            <id>generate-karaf-feature</id><phase>generate-resources</phase>
-            <goals><goal>features-generate-descriptor</goal></goals>
+            <id>copy-karaf-feature</id><phase>generate-resources</phase><goals><goal>copy-resources</goal></goals>
             <configuration>
-              <aggregateFeatures>false</aggregateFeatures>
-              <includeTransitiveDependency>false</includeTransitiveDependency>
+              <outputDirectory>${project.build.directory}/feature</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>src/main/feature</directory>
+                  <filtering>true</filtering>
+                  <includes><include>feature.xml</include></includes>
+                </resource>
+              </resources>
             </configuration>
           </execution>
+        </executions>
+      </plugin>
+
+      <!-- Build the KAR from target/feature/feature.xml; do not auto-generate it from the openHAB BOM. -->
+      <plugin>
+        <groupId>org.apache.karaf.tooling</groupId><artifactId>karaf-maven-plugin</artifactId><version>${karaf.tooling.version}</version>
+        <executions>
           <execution><id>build-kar</id><phase>package</phase><goals><goal>kar</goal></goals></execution>
         </executions>
       </plugin>

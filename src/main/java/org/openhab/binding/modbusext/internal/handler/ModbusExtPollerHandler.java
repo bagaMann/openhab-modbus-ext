@@ -34,6 +34,7 @@ import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +60,10 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     public void handleCommand(ChannelUID channelUID, Command command) {
         ModbusChannelRuntime runtime = channelRuntimes.stream().filter(candidate -> candidate.uid().equals(channelUID)).findFirst().orElse(null);
         if (runtime == null) { logger.warn("Ignoring command {} for unknown channel {}", command, channelUID); return; }
+        if (command == RefreshType.REFRESH) {
+            logger.trace("Ignoring REFRESH command for channel {}", channelUID);
+            return;
+        }
         Integer writeStart = runtime.writeStart();
         if (writeStart == null) { logger.debug("Ignoring command {} for {}: writeStart is not configured", command, channelUID); return; }
         var transformedCommand = runtime.transformWriteCommand(command);
@@ -81,7 +86,8 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         logger.debug("Ignoring command {} for {}: this poller is read-only", command, channelUID);
     }
 
-    private void handlePulseCommand(ModbusChannelRuntime runtime, Command command, ModbusCommunicationInterface localComms, ModbusExtEndpointHandler<?> endpoint) {
+    private void handlePulseCommand(ModbusChannelRuntime runtime, Command command, ModbusCommunicationInterface localComms,
+            ModbusExtEndpointHandler<?> endpoint) {
         var requested = ModbusBitUtilities.translateCommand2Boolean(command);
         if (requested.isEmpty()) { logger.warn("Cannot convert pulse command {} for channel {} to boolean", command, runtime.uid()); return; }
         AsyncModbusReadResult result = lastResult;
@@ -89,15 +95,20 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         var feedback = runtime.extractFeedbackBoolean(result);
         if (feedback.isEmpty()) { logger.warn("Cannot pulse channel {} because feedback cannot be converted to boolean", runtime.uid()); return; }
         if (!runtime.tryBeginPulse(feedback.get(), requested.get())) {
-            logger.debug("Pulse not required or already active for channel {} (feedback={}, requested={})", runtime.uid(), feedback.get(), requested.get());
+            logger.debug("Pulse command stored/no pulse required for channel {} (feedback={}, requested={})", runtime.uid(), feedback.get(), requested.get());
             return;
         }
-        logger.debug("Starting {} ms pulse for channel {} (feedback={}, requested={})", runtime.pulseDurationMillis(), runtime.uid(), feedback.get(), requested.get());
+        startPulse(runtime, localComms, endpoint, feedback.get(), requested.get());
+    }
+
+    private void startPulse(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
+            ModbusExtEndpointHandler<?> endpoint, boolean feedback, boolean requested) {
+        logger.debug("Starting {} ms pulse for channel {} (feedback={}, requested={})", runtime.pulseDurationMillis(), runtime.uid(), feedback, requested);
         if (!submitHoldingBit(runtime, true, localComms, endpoint, () -> scheduler.schedule(
                 () -> submitHoldingBit(runtime, false, localComms, endpoint,
-                        () -> scheduler.schedule(() -> verifyPulseOutputOff(runtime, localComms, endpoint, PULSE_RESET_RETRIES),
-                                PULSE_VERIFY_DELAY_MILLIS, TimeUnit.MILLISECONDS),
+                        () -> pulseWriteCompleted(runtime, localComms, endpoint),
                         failure -> {
+                            runtime.finishPulse();
                             logger.error("CRITICAL: failed to reset pulse output OFF for channel {}: {}", runtime.uid(), failure);
                             scheduler.schedule(() -> forcePulseOutputOff(runtime, localComms, endpoint, PULSE_RESET_RETRIES),
                                     PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
@@ -108,10 +119,22 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         })) runtime.finishPulse();
     }
 
+    private void pulseWriteCompleted(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
+            ModbusExtEndpointHandler<?> endpoint) {
+        // The command path is released immediately after WRITE 0. Guard verification is deliberately independent.
+        boolean startPending = runtime.completePulseAndBeginPending();
+        scheduler.schedule(() -> verifyPulseOutputOff(runtime, localComms, endpoint, PULSE_RESET_RETRIES),
+                PULSE_VERIFY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
+        if (startPending) {
+            logger.debug("Starting pending pulse immediately for channel {}", runtime.uid());
+            startPulse(runtime, localComms, endpoint, false, false);
+        }
+    }
+
     private void verifyPulseOutputOff(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
             ModbusExtEndpointHandler<?> endpoint, int retriesRemaining) {
         Integer writeStart = runtime.writeStart();
-        if (writeStart == null) { runtime.finishPulse(); return; }
+        if (writeStart == null) return;
         ModbusReadRequestBlueprint request = new ModbusReadRequestBlueprint(endpoint.getSlaveId(),
                 ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, writeStart, 1, config.maxTries);
         localComms.submitOneTimePoll(request, result -> {
@@ -123,7 +146,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             }
             boolean on = isRegisterBitSet(registers.get(), 0, runtime.writeSubIndex());
             if (!on) {
-                runtime.finishPulse();
                 logger.debug("Pulse output physically confirmed OFF for channel {}", runtime.uid());
                 return;
             }
@@ -138,7 +160,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     private void forcePulseOutputOff(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
             ModbusExtEndpointHandler<?> endpoint, int retriesRemaining) {
         if (retriesRemaining <= 0) {
-            runtime.finishPulse();
             logger.error("CRITICAL: pulse output for channel {} could not be confirmed OFF after {} reset attempts", runtime.uid(), PULSE_RESET_RETRIES);
             return;
         }
@@ -153,7 +174,6 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     private void retryPulseVerification(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
             ModbusExtEndpointHandler<?> endpoint, int retriesRemaining) {
         if (retriesRemaining <= 0) {
-            runtime.finishPulse();
             logger.error("CRITICAL: pulse output for channel {} could not be verified OFF after {} attempts", runtime.uid(), PULSE_RESET_RETRIES);
             return;
         }
@@ -194,7 +214,18 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         ModbusReadRequestBlueprint request = new ModbusReadRequestBlueprint(endpoint.getSlaveId(), functionCode, config.start, config.length, config.maxTries); if (config.refresh <= 0) { updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "Polling disabled"); return; } pollTask = localComms.registerRegularPoll(request, config.refresh, 0, this, this); updateStatus(ThingStatus.ONLINE);
     }
 
-    @Override public void handle(AsyncModbusReadResult result) { lastResult = result; lastResultTimestamp = System.currentTimeMillis(); if (THING_TYPE_HOLDING_POLLER.equals(thing.getThingTypeUID())) result.getRegisters().ifPresent(registers -> lastPolledRegisterCache.set(new ModbusRegisterArray(registers.getBytes()))); long now = System.currentTimeMillis(); for (ModbusChannelRuntime runtime : channelRuntimes) if (runtime.hasRead()) { var state = runtime.extract(result); if (runtime.shouldUpdate(state, now)) updateState(runtime.uid(), state); } ThingStatusInfo status = thing.getStatusInfo(); if (status.getStatus() == ThingStatus.OFFLINE && status.getStatusDetail() == ThingStatusDetail.COMMUNICATION_ERROR) updateStatus(ThingStatus.ONLINE); }
+    @Override public void handle(AsyncModbusReadResult result) {
+        lastResult = result;
+        lastResultTimestamp = System.currentTimeMillis();
+        if (THING_TYPE_HOLDING_POLLER.equals(thing.getThingTypeUID())) result.getRegisters().ifPresent(registers -> lastPolledRegisterCache.set(new ModbusRegisterArray(registers.getBytes())));
+        long now = System.currentTimeMillis();
+        for (ModbusChannelRuntime runtime : channelRuntimes) if (runtime.hasRead()) {
+            if (runtime.isPulseMode()) runtime.extractFeedbackBoolean(result).ifPresent(runtime::observePulseFeedback);
+            var state = runtime.extract(result);
+            if (runtime.shouldUpdate(state, now)) updateState(runtime.uid(), state);
+        }
+        ThingStatusInfo status = thing.getStatusInfo(); if (status.getStatus() == ThingStatus.OFFLINE && status.getStatusDetail() == ThingStatusDetail.COMMUNICATION_ERROR) updateStatus(ThingStatus.ONLINE);
+    }
     @Override public void handle(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) { logger.debug("Poller {} read failed: {}", thing.getUID(), failure); updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, failure.toString()); }
     public @Nullable AsyncModbusReadResult getCachedResult() { AsyncModbusReadResult r = lastResult; if (r == null) return null; return config.cacheMillis < 0 || System.currentTimeMillis() - lastResultTimestamp <= config.cacheMillis ? r : null; }
     @Override public synchronized void dispose() { unregisterPollTask(); lastResult = null; lastPolledRegisterCache.set(null); channelRuntimes = List.of(); }

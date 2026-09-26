@@ -26,6 +26,7 @@ import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.io.transport.modbus.ModbusWriteCoilRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusWriteRegisterRequestBlueprint;
 import org.openhab.core.io.transport.modbus.PollTask;
+import org.openhab.core.thing.AutoUpdatePolicy;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
@@ -35,6 +36,7 @@ import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
@@ -231,8 +233,31 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         if (functionCode == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Unsupported poller thing type: " + thing.getThingTypeUID()); return; }
         if (config.start < 0 || config.length < 1) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "start must be >= 0 and length must be >= 1"); return; }
         boolean registerPoll = isRegisterFunction(functionCode); if (registerPoll && config.length > ModbusConstants.MAX_REGISTERS_READ_COUNT) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Register poll length exceeds Modbus protocol limit"); return; } if (!registerPoll && config.length > ModbusConstants.MAX_BITS_READ_COUNT) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Bit poll length exceeds Modbus protocol limit"); return; }
-        if (!buildChannelRuntimes(registerPoll)) return; ModbusExtEndpointHandler<?> endpoint = getEndpointHandler(); if (endpoint == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Modbus endpoint is offline"); return; } ModbusCommunicationInterface localComms = endpoint.getCommunicationInterface(); if (localComms == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Modbus endpoint communication interface is not initialized"); return; } comms = localComms;
+        if (!buildChannelRuntimes(registerPoll)) return;
+        applyAutoUpdatePolicies();
+        ModbusExtEndpointHandler<?> endpoint = getEndpointHandler(); if (endpoint == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Modbus endpoint is offline"); return; } ModbusCommunicationInterface localComms = endpoint.getCommunicationInterface(); if (localComms == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Modbus endpoint communication interface is not initialized"); return; } comms = localComms;
         ModbusReadRequestBlueprint request = new ModbusReadRequestBlueprint(endpoint.getSlaveId(), functionCode, config.start, config.length, config.maxTries); if (config.refresh <= 0) { updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "Polling disabled"); return; } pollTask = localComms.registerRegularPoll(request, config.refresh, 0, this, this); updateStatus(ThingStatus.ONLINE);
+    }
+
+    private void applyAutoUpdatePolicies() {
+        List<Channel> channels = new ArrayList<>(thing.getChannels().size());
+        boolean changed = false;
+        for (Channel channel : thing.getChannels()) {
+            ModbusChannelRuntime runtime = channelRuntimes.stream()
+                    .filter(candidate -> candidate.uid().equals(channel.getUID())).findFirst().orElse(null);
+            AutoUpdatePolicy desired = runtime != null && runtime.isPulseMode()
+                    ? AutoUpdatePolicy.VETO : AutoUpdatePolicy.DEFAULT;
+            if (channel.getAutoUpdatePolicy() != desired) {
+                channels.add(ChannelBuilder.create(channel).withAutoUpdatePolicy(desired).build());
+                changed = true;
+                logger.debug("Setting auto-update policy {} for channel {}", desired, channel.getUID());
+            } else {
+                channels.add(channel);
+            }
+        }
+        if (changed) {
+            updateThing(editThing().withChannels(channels).build());
+        }
     }
 
     @Override public void handle(AsyncModbusReadResult result) {

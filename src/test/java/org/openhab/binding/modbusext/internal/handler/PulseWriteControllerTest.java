@@ -1,37 +1,24 @@
 package org.openhab.binding.modbusext.internal.handler;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
 class PulseWriteControllerTest {
-    @Test
-    void pulsesWhenOffFeedbackMustBecomeOn() {
-        assertTrue(PulseWriteController.shouldPulse(false, true));
-    }
+    @Test void pulsesWhenOffFeedbackMustBecomeOn() { assertTrue(PulseWriteController.shouldPulse(false, true)); }
+    @Test void pulsesWhenOnFeedbackMustBecomeOff() { assertTrue(PulseWriteController.shouldPulse(true, false)); }
+    @Test void doesNothingWhenFeedbackAlreadyOn() { assertFalse(PulseWriteController.shouldPulse(true, true)); }
+    @Test void doesNothingWhenFeedbackAlreadyOff() { assertFalse(PulseWriteController.shouldPulse(false, false)); }
 
     @Test
-    void pulsesWhenOnFeedbackMustBecomeOff() {
-        assertTrue(PulseWriteController.shouldPulse(true, false));
-    }
-
-    @Test
-    void doesNothingWhenFeedbackAlreadyOn() {
-        assertFalse(PulseWriteController.shouldPulse(true, true));
-    }
-
-    @Test
-    void doesNothingWhenFeedbackAlreadyOff() {
-        assertFalse(PulseWriteController.shouldPulse(false, false));
-    }
-
-    @Test
-    void rejectsSecondPulseWhileFirstIsActive() {
+    void rejectsSecondPulseWhileFirstIsActiveButKeepsLatestDesiredState() {
         PulseWriteController controller = new PulseWriteController();
         assertTrue(controller.tryBegin(false, true));
         assertTrue(controller.isActive());
-        assertFalse(controller.tryBegin(false, true));
+        assertFalse(controller.tryBegin(false, false));
+        assertEquals(false, controller.desiredState().orElseThrow());
     }
 
     @Test
@@ -41,5 +28,26 @@ class PulseWriteControllerTest {
         controller.finish();
         assertFalse(controller.isActive());
         assertTrue(controller.tryBegin(true, false));
+    }
+
+    @Test
+    void pendingPulseUsesLatestDesiredState() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.request(false, true));
+        assertFalse(controller.request(false, false));
+        controller.finish();
+        assertFalse(controller.tryBeginPending(false));
+        assertFalse(controller.isActive());
+        assertFalse(controller.request(true, false));
+        assertTrue(controller.tryBeginPending(true));
+    }
+
+    @Test
+    void clearResetsLifecycleAndDesiredState() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.request(false, true));
+        controller.clear();
+        assertFalse(controller.isActive());
+        assertTrue(controller.desiredState().isEmpty());
     }
 }

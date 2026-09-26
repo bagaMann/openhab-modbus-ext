@@ -127,8 +127,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
                 logger.debug("Pulse output physically confirmed OFF for channel {}", runtime.uid());
                 return;
             }
-            logger.warn("Pulse output for channel {} is still ON after pulse; forcing OFF ({} retries remaining)",
-                    runtime.uid(), retriesRemaining);
+            logger.warn("Pulse output for channel {} is still ON after pulse; forcing OFF ({} retries remaining)", runtime.uid(), retriesRemaining);
             forcePulseOutputOff(runtime, localComms, endpoint, retriesRemaining);
         }, failure -> {
             logger.warn("Pulse guard read failed for channel {}: {}", runtime.uid(), failure);
@@ -140,36 +139,28 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             ModbusExtEndpointHandler<?> endpoint, int retriesRemaining) {
         if (retriesRemaining <= 0) {
             runtime.finishPulse();
-            logger.error("CRITICAL: pulse output for channel {} could not be confirmed OFF after {} reset attempts",
-                    runtime.uid(), PULSE_RESET_RETRIES);
+            logger.error("CRITICAL: pulse output for channel {} could not be confirmed OFF after {} reset attempts", runtime.uid(), PULSE_RESET_RETRIES);
             return;
         }
         if (!submitHoldingBit(runtime, false, localComms, endpoint,
-                () -> scheduler.schedule(() -> verifyPulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1),
-                        PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS),
+                () -> scheduler.schedule(() -> verifyPulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1), PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS),
                 failure -> {
                     logger.error("CRITICAL: forced OFF write failed for pulse channel {}: {}", runtime.uid(), failure);
-                    scheduler.schedule(() -> forcePulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1),
-                            PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
-                })) {
-            scheduler.schedule(() -> forcePulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1),
-                    PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
-        }
+                    scheduler.schedule(() -> forcePulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1), PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
+                })) scheduler.schedule(() -> forcePulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1), PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     private void retryPulseVerification(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
             ModbusExtEndpointHandler<?> endpoint, int retriesRemaining) {
         if (retriesRemaining <= 0) {
             runtime.finishPulse();
-            logger.error("CRITICAL: pulse output for channel {} could not be verified OFF after {} attempts",
-                    runtime.uid(), PULSE_RESET_RETRIES);
+            logger.error("CRITICAL: pulse output for channel {} could not be verified OFF after {} attempts", runtime.uid(), PULSE_RESET_RETRIES);
             return;
         }
-        scheduler.schedule(() -> verifyPulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1),
-                PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
+        scheduler.schedule(() -> verifyPulseOutputOff(runtime, localComms, endpoint, retriesRemaining - 1), PULSE_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS);
     }
 
-    private boolean isRegisterBitSet(ModbusRegisterArray registers, int registerIndex, int bitIndex) {
+    static boolean isRegisterBitSet(ModbusRegisterArray registers, int registerIndex, int bitIndex) {
         byte[] bytes = registers.getBytes();
         int offset = registerIndex * 2;
         if (offset + 1 >= bytes.length || bitIndex < 0 || bitIndex > 15) return false;

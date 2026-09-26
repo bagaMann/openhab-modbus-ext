@@ -204,6 +204,8 @@ final class ModbusChannelRuntime {
     boolean isPulseMode() { return writeMode.equals("pulse"); }
     long pulseDurationMillis() { return pulseDurationMillis; }
     boolean tryBeginPulse(boolean feedback, boolean requested) { return pulseController.tryBegin(feedback, requested); }
+    boolean completePulseAndBeginPending() { return pulseController.completeAndBeginPending(); }
+    void observePulseFeedback(boolean feedback) { pulseController.observeFeedback(feedback); }
     void finishPulse() { pulseController.finish(); }
 
     Optional<Command> transformWriteCommand(Command command) {

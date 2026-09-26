@@ -13,7 +13,7 @@ class PulseWriteControllerTest {
     @Test void doesNothingWhenFeedbackAlreadyOff() { assertFalse(PulseWriteController.shouldPulse(false, false)); }
 
     @Test
-    void rejectsSecondPulseWhileFirstIsActiveButKeepsLatestDesiredState() {
+    void activePulseKeepsLatestDesiredState() {
         PulseWriteController controller = new PulseWriteController();
         assertTrue(controller.tryBegin(false, true));
         assertTrue(controller.isActive());
@@ -22,52 +22,68 @@ class PulseWriteControllerTest {
     }
 
     @Test
-    void allowsNewPulseAfterPreviousPulseFinishes() {
+    void completedPulseUpdatesExpectedStateWithoutWaitingForPoll() {
         PulseWriteController controller = new PulseWriteController();
         assertTrue(controller.tryBegin(false, true));
-        controller.finish();
+        assertFalse(controller.completeAndBeginPending());
         assertFalse(controller.isActive());
-        assertTrue(controller.tryBegin(true, false));
+        assertEquals(true, controller.expectedState().orElseThrow());
     }
 
     @Test
-    void pendingPulseUsesLatestDesiredState() {
-        PulseWriteController controller = new PulseWriteController();
-
-        // First command starts a pulse. A later command arrives while it is active;
-        // it must replace the desired state rather than queue another pulse.
-        assertTrue(controller.request(false, true));
-        assertFalse(controller.request(false, false));
-        controller.finish();
-
-        // Feedback already equals the latest desired state (OFF), so no new pulse.
-        assertFalse(controller.tryBeginPending(false));
-        assertFalse(controller.isActive());
-
-        // While feedback is still OFF, request ON. That request itself starts the pulse.
-        assertTrue(controller.request(false, true));
-        assertTrue(controller.isActive());
-        assertEquals(true, controller.desiredState().orElseThrow());
-    }
-
-    @Test
-    void pendingPulseStartsWhenLatestDesiredStateDiffersAfterActivePulse() {
+    void latestOppositeCommandStartsPendingPulseImmediately() {
         PulseWriteController controller = new PulseWriteController();
         assertTrue(controller.request(false, true));
         assertFalse(controller.request(false, false));
-        controller.finish();
 
-        // Simulate feedback changing to ON while the latest desired state remains OFF.
-        assertTrue(controller.tryBeginPending(true));
+        assertTrue(controller.completeAndBeginPending());
         assertTrue(controller.isActive());
+        assertEquals(true, controller.expectedState().orElseThrow());
+
+        assertFalse(controller.completeAndBeginPending());
+        assertFalse(controller.isActive());
+        assertEquals(false, controller.expectedState().orElseThrow());
     }
 
     @Test
-    void clearResetsLifecycleAndDesiredState() {
+    void repeatedCommandsCollapseToLatestDesiredState() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.request(false, true));
+        assertFalse(controller.request(false, false));
+        assertFalse(controller.request(false, true));
+        assertFalse(controller.request(false, false));
+
+        assertTrue(controller.completeAndBeginPending());
+        assertFalse(controller.completeAndBeginPending());
+        assertEquals(false, controller.expectedState().orElseThrow());
+    }
+
+    @Test
+    void staleFeedbackDoesNotCancelExpectedStateBetweenPolls() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.request(false, true));
+        assertFalse(controller.completeAndBeginPending());
+
+        // Regular feedback may still contain OFF. A new OFF command must use the expected ON state
+        // and therefore start another toggle immediately.
+        assertTrue(controller.request(false, false));
+    }
+
+    @Test
+    void freshFeedbackCanResynchroniseIdleController() {
+        PulseWriteController controller = new PulseWriteController();
+        controller.observeFeedback(true);
+        assertEquals(true, controller.expectedState().orElseThrow());
+        assertTrue(controller.request(true, false));
+    }
+
+    @Test
+    void clearResetsLifecycleAndStates() {
         PulseWriteController controller = new PulseWriteController();
         assertTrue(controller.request(false, true));
         controller.clear();
         assertFalse(controller.isActive());
         assertTrue(controller.desiredState().isEmpty());
+        assertTrue(controller.expectedState().isEmpty());
     }
 }

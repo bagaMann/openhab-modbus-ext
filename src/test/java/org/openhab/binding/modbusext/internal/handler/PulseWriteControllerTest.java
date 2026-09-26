@@ -33,13 +33,33 @@ class PulseWriteControllerTest {
     @Test
     void pendingPulseUsesLatestDesiredState() {
         PulseWriteController controller = new PulseWriteController();
+
+        // First command starts a pulse. A later command arrives while it is active;
+        // it must replace the desired state rather than queue another pulse.
         assertTrue(controller.request(false, true));
         assertFalse(controller.request(false, false));
         controller.finish();
+
+        // Feedback already equals the latest desired state (OFF), so no new pulse.
         assertFalse(controller.tryBeginPending(false));
         assertFalse(controller.isActive());
-        assertFalse(controller.request(true, false));
+
+        // While feedback is still OFF, request ON. That request itself starts the pulse.
+        assertTrue(controller.request(false, true));
+        assertTrue(controller.isActive());
+        assertEquals(true, controller.desiredState().orElseThrow());
+    }
+
+    @Test
+    void pendingPulseStartsWhenLatestDesiredStateDiffersAfterActivePulse() {
+        PulseWriteController controller = new PulseWriteController();
+        assertTrue(controller.request(false, true));
+        assertFalse(controller.request(false, false));
+        controller.finish();
+
+        // Simulate feedback changing to ON while the latest desired state remains OFF.
         assertTrue(controller.tryBeginPending(true));
+        assertTrue(controller.isActive());
     }
 
     @Test

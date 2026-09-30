@@ -98,10 +98,20 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             }
             long interval = runtime.scheduledWriteIntervalSeconds();
             ScheduledFuture<?> task = scheduler.scheduleWithFixedDelay(
-                    () -> executeScheduledWrite(runtime, localComms, endpoint), interval, interval, TimeUnit.SECONDS);
+                    () -> executeScheduledWriteSafely(runtime, localComms, endpoint), interval, interval,
+                    TimeUnit.SECONDS);
             scheduledWriteTasks.add(task);
             logger.debug("Scheduled {} write for channel {} every {} seconds", runtime.scheduledValueSource(),
                     runtime.uid(), interval);
+        }
+    }
+
+    private void executeScheduledWriteSafely(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
+            ModbusExtEndpointHandler<?> endpoint) {
+        try {
+            executeScheduledWrite(runtime, localComms, endpoint);
+        } catch (RuntimeException e) {
+            logger.warn("Scheduled write failed unexpectedly for channel {}; keeping schedule active", runtime.uid(), e);
         }
     }
 

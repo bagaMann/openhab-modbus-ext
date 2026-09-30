@@ -33,6 +33,7 @@ final class ModbusChannelRuntime {
     private final int readIndex;
     private final int readSubIndex;
     private final ValueType readValueType;
+    private final boolean structuredDateTime;
     private final String itemType;
     private final ModbusExtTransformation readTransformation;
     private final @Nullable Integer writeStart;
@@ -48,7 +49,8 @@ final class ModbusChannelRuntime {
     private final ChannelUpdateTracker updateTracker;
 
     private ModbusChannelRuntime(ChannelUID uid, int pollStart, int pollLength, boolean registerPoll, int readIndex,
-            int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
+            int readSubIndex, ValueType readValueType, boolean structuredDateTime, String itemType,
+            ModbusExtTransformation readTransformation,
             @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType,
             ModbusExtTransformation writeTransformation, String writeMode, long pulseDurationMillis,
             boolean scheduledWrite, long scheduledWriteIntervalSeconds, String scheduledValueSource,
@@ -60,6 +62,7 @@ final class ModbusChannelRuntime {
         this.readIndex = readIndex;
         this.readSubIndex = readSubIndex;
         this.readValueType = readValueType;
+        this.structuredDateTime = structuredDateTime;
         this.itemType = itemType;
         this.readTransformation = readTransformation;
         this.writeStart = writeStart;
@@ -93,8 +96,20 @@ final class ModbusChannelRuntime {
         }
 
         String configuredReadValueType = config.readValueType == null ? "" : config.readValueType.trim();
+        boolean structuredDateTime = configuredReadValueType.equalsIgnoreCase(RegisterDateTimeCodec.VALUE_TYPE);
         ValueType valueType;
-        if (!hasRead) {
+        if (structuredDateTime) {
+            if (!hasRead || !poller.registerPoll()) {
+                throw new IllegalArgumentException(RegisterDateTimeCodec.VALUE_TYPE + " requires a register poller");
+            }
+            if (!"DateTime".equals(channel.getAcceptedItemType())) {
+                throw new IllegalArgumentException(RegisterDateTimeCodec.VALUE_TYPE + " requires a DateTime channel");
+            }
+            if (!new ModbusExtTransformation(List.of(config.readTransform)).isIdentityTransform()) {
+                throw new IllegalArgumentException(RegisterDateTimeCodec.VALUE_TYPE + " does not support readTransform");
+            }
+            valueType = ValueType.UINT16;
+        } else if (!hasRead) {
             valueType = ValueType.BIT;
         } else if (!poller.registerPoll() && configuredReadValueType.isBlank()) {
             valueType = ValueType.BIT;
@@ -113,7 +128,7 @@ final class ModbusChannelRuntime {
                 throw new IllegalArgumentException("X.Y notation is not valid for coil/discrete polls");
             }
         } else if (hasRead) {
-            int bits = valueType.getBits();
+            int bits = structuredDateTime ? RegisterDateTimeCodec.REGISTER_COUNT * 16 : valueType.getBits();
             if (bits >= 16 && parts.length == 2) {
                 throw new IllegalArgumentException("X.Y is only valid for value types smaller than 16 bits");
             }
@@ -127,10 +142,11 @@ final class ModbusChannelRuntime {
         }
 
         if (hasRead) {
-            int startBit = index * (poller.registerPoll() ? 16 : 1) + subIndex * valueType.getBits();
+            int valueBits = structuredDateTime ? RegisterDateTimeCodec.REGISTER_COUNT * 16 : valueType.getBits();
+            int startBit = index * (poller.registerPoll() ? 16 : 1) + subIndex * valueBits;
             int pollStartBit = poller.start() * (poller.registerPoll() ? 16 : 1);
             int pollEndBit = (poller.start() + poller.length()) * (poller.registerPoll() ? 16 : 1) - 1;
-            if (startBit < pollStartBit || startBit + valueType.getBits() - 1 > pollEndBit) {
+            if (startBit < pollStartBit || startBit + valueBits - 1 > pollEndBit) {
                 throw new IllegalArgumentException("Channel read range is outside the poller range");
             }
         }
@@ -217,7 +233,7 @@ final class ModbusChannelRuntime {
         }
 
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(),
-                hasRead ? index : -1, subIndex, valueType, channel.getAcceptedItemType(),
+                hasRead ? index : -1, subIndex, valueType, structuredDateTime, channel.getAcceptedItemType(),
                 new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType,
                 new ModbusExtTransformation(List.of(config.writeTransform)), writeMode, config.pulseDurationMillis,
                 config.scheduledWrite, config.scheduledWriteIntervalSeconds, scheduledValueSource,
@@ -269,6 +285,7 @@ final class ModbusChannelRuntime {
 
     private State adaptToItemType(State numeric) {
         if (numeric == UnDefType.UNDEF) return numeric;
+        if (numeric instanceof DateTimeType) return "DateTime".equals(itemType) ? numeric : UnDefType.UNDEF;
         boolean boolValue = !DecimalType.ZERO.equals(numeric);
         if (readTransformation.isIdentityTransform()) {
             return switch (itemType) {
@@ -302,6 +319,10 @@ final class ModbusChannelRuntime {
     }
 
     private State extractRegisters(ModbusRegisterArray registers) {
+        if (structuredDateTime) {
+            return RegisterDateTimeCodec.decode(registers, readIndex - pollStart).<State>map(v -> v)
+                    .orElse(UnDefType.UNDEF);
+        }
         int bits = readValueType.getBits();
         int extractIndex = bits >= 16 ? readIndex - pollStart : (readIndex - pollStart) * (16 / bits) + readSubIndex;
         return ModbusBitUtilities.extractStateFromRegisters(registers, extractIndex, readValueType).<State>map(v -> v).orElse(UnDefType.UNDEF);

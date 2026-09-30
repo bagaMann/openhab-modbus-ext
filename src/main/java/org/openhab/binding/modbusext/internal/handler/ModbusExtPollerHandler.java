@@ -270,7 +270,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     }
 
     @Override public synchronized void initialize() {
-        unregisterPollTask(); config = getConfigAs(ModbusPollerConfig.class); ModbusReadFunctionCode functionCode = getReadFunctionCode();
+        cancelScheduledWrites(); unregisterPollTask(); config = getConfigAs(ModbusPollerConfig.class); ModbusReadFunctionCode functionCode = getReadFunctionCode();
         if (functionCode == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Unsupported poller thing type: " + thing.getThingTypeUID()); return; }
         if (config.start < 0 || config.length < 1) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "start must be >= 0 and length must be >= 1"); return; }
         boolean registerPoll = isRegisterFunction(functionCode); if (registerPoll && config.length > ModbusConstants.MAX_REGISTERS_READ_COUNT) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Register poll length exceeds Modbus protocol limit"); return; } if (!registerPoll && config.length > ModbusConstants.MAX_BITS_READ_COUNT) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Bit poll length exceeds Modbus protocol limit"); return; }

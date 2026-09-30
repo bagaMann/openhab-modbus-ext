@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<binding:binding id="modbusext"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:binding="https://openhab.org/schemas/binding-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/binding-description/v1.0.0 https://openhab.org/schemas/binding-description-1.0.0.xsd">
+    <name>Modbus Ext Binding</name>
+    <description>Modbus binding with channel-based register mapping.</description>
+</binding:binding>

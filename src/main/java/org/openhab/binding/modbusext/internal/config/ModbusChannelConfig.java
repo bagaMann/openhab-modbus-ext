@@ -15,6 +15,10 @@ public class ModbusChannelConfig {
     public String writeMode = "direct";
     public long pulseDurationMillis = 200;
 
+    public boolean scheduledWrite = false;
+    public long scheduledWriteIntervalSeconds = 86400;
+    public String scheduledValueSource = "unixTime";
+
     public long updateUnchangedValuesEveryMillis = 1000;
 
     public boolean hasReadAddress() {
@@ -29,6 +33,8 @@ public class ModbusChannelConfig {
     public String toString() {
         return "ModbusChannelConfig{readStart='" + readStart + "', readValueType='" + readValueType
                 + "', writeStart='" + writeStart + "', writeValueType='" + writeValueType + "', writeType='"
-                + writeType + "', writeMode='" + writeMode + "', pulseDurationMillis=" + pulseDurationMillis + "}";
+                + writeType + "', writeMode='" + writeMode + "', pulseDurationMillis=" + pulseDurationMillis
+                + ", scheduledWrite=" + scheduledWrite + ", scheduledWriteIntervalSeconds="
+                + scheduledWriteIntervalSeconds + ", scheduledValueSource='" + scheduledValueSource + "'}";
     }
 }

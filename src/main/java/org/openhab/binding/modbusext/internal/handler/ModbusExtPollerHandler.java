@@ -5,6 +5,7 @@ import static org.openhab.binding.modbusext.internal.ModbusExtBindingConstants.*
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -38,6 +39,7 @@ import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.type.AutoUpdatePolicy;
 import org.openhab.core.types.Command;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +57,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     private volatile @Nullable AsyncModbusReadResult lastResult;
     private final AtomicReference<@Nullable ModbusRegisterArray> lastPolledRegisterCache = new AtomicReference<>();
     private final ConcurrentHashMap<ChannelUID, AtomicLong> pulseGenerations = new ConcurrentHashMap<>();
+    private final List<ScheduledFuture<?>> scheduledWriteTasks = new ArrayList<>();
     private volatile long lastResultTimestamp;
     private ModbusPollerConfig config = new ModbusPollerConfig();
     private volatile List<ModbusChannelRuntime> channelRuntimes = List.of();
@@ -86,6 +89,44 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
             writeHolding(runtime, writeCommand, localComms, endpoint); return;
         }
         logger.debug("Ignoring command {} for {}: this poller is read-only", command, channelUID);
+    }
+
+    private void startScheduledWrites(ModbusCommunicationInterface localComms, ModbusExtEndpointHandler<?> endpoint) {
+        for (ModbusChannelRuntime runtime : channelRuntimes) {
+            if (!runtime.isScheduledWrite()) {
+                continue;
+            }
+            long interval = runtime.scheduledWriteIntervalSeconds();
+            ScheduledFuture<?> task = scheduler.scheduleWithFixedDelay(
+                    () -> executeScheduledWrite(runtime, localComms, endpoint), interval, interval, TimeUnit.SECONDS);
+            scheduledWriteTasks.add(task);
+            logger.debug("Scheduled {} write for channel {} every {} seconds", runtime.scheduledValueSource(),
+                    runtime.uid(), interval);
+        }
+    }
+
+    private void executeScheduledWrite(ModbusChannelRuntime runtime, ModbusCommunicationInterface localComms,
+            ModbusExtEndpointHandler<?> endpoint) {
+        if (!"unixTime".equalsIgnoreCase(runtime.scheduledValueSource())) {
+            logger.warn("Ignoring unsupported scheduled value source {} for channel {}", runtime.scheduledValueSource(),
+                    runtime.uid());
+            return;
+        }
+        Command sourceCommand = new DecimalType(java.time.Instant.now().getEpochSecond());
+        var transformedCommand = runtime.transformWriteCommand(sourceCommand);
+        if (transformedCommand.isEmpty()) {
+            logger.warn("Scheduled write transformation failed for channel {}", runtime.uid());
+            return;
+        }
+        logger.debug("Executing scheduled Unix-time write for channel {}", runtime.uid());
+        writeHolding(runtime, transformedCommand.get(), localComms, endpoint);
+    }
+
+    private void cancelScheduledWrites() {
+        for (ScheduledFuture<?> task : scheduledWriteTasks) {
+            task.cancel(false);
+        }
+        scheduledWriteTasks.clear();
     }
 
     private void handlePulseCommand(ModbusChannelRuntime runtime, Command command, ModbusCommunicationInterface localComms,
@@ -236,6 +277,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
         if (!buildChannelRuntimes(registerPoll)) return;
         applyAutoUpdatePolicies();
         ModbusExtEndpointHandler<?> endpoint = getEndpointHandler(); if (endpoint == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Modbus endpoint is offline"); return; } ModbusCommunicationInterface localComms = endpoint.getCommunicationInterface(); if (localComms == null) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Modbus endpoint communication interface is not initialized"); return; } comms = localComms;
+        startScheduledWrites(localComms, endpoint);
         ModbusReadRequestBlueprint request = new ModbusReadRequestBlueprint(endpoint.getSlaveId(), functionCode, config.start, config.length, config.maxTries); if (config.refresh <= 0) { updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "Polling disabled"); return; } pollTask = localComms.registerRegularPoll(request, config.refresh, 0, this, this); updateStatus(ThingStatus.ONLINE);
     }
 
@@ -272,7 +314,7 @@ public class ModbusExtPollerHandler extends BaseBridgeHandler
     }
     @Override public void handle(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) { logger.debug("Poller {} read failed: {}", thing.getUID(), failure); updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, failure.toString()); }
     public @Nullable AsyncModbusReadResult getCachedResult() { AsyncModbusReadResult r = lastResult; if (r == null) return null; return config.cacheMillis < 0 || System.currentTimeMillis() - lastResultTimestamp <= config.cacheMillis ? r : null; }
-    @Override public synchronized void dispose() { unregisterPollTask(); lastResult = null; lastPolledRegisterCache.set(null); pulseGenerations.clear(); channelRuntimes = List.of(); }
+    @Override public synchronized void dispose() { cancelScheduledWrites(); unregisterPollTask(); lastResult = null; lastPolledRegisterCache.set(null); pulseGenerations.clear(); channelRuntimes = List.of(); }
     private boolean buildChannelRuntimes(boolean registerPoll) { List<ModbusChannelRuntime> runtimes = new ArrayList<>(); var view = new ModbusChannelRuntime.ModbusPollerConfigView(config.start, config.length, registerPoll); for (Channel channel : thing.getChannels()) try { runtimes.add(ModbusChannelRuntime.create(channel, view)); } catch (IllegalArgumentException e) { updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage()); return false; } channelRuntimes = List.copyOf(runtimes); return true; }
     private void unregisterPollTask() { PollTask task = pollTask; ModbusCommunicationInterface c = comms; pollTask = null; comms = null; if (task != null && c != null) c.unregisterRegularPoll(task); }
     private @Nullable ModbusExtEndpointHandler<?> getEndpointHandler() { Bridge parent = getBridge(); if (parent == null || parent.getStatus() != ThingStatus.ONLINE) return null; ThingHandler handler = parent.getHandler(); return handler instanceof ModbusExtEndpointHandler<?> endpoint ? endpoint : null; }

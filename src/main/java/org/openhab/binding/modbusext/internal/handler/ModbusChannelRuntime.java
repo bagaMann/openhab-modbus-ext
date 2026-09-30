@@ -41,6 +41,9 @@ final class ModbusChannelRuntime {
     private final ModbusExtTransformation writeTransformation;
     private final String writeMode;
     private final long pulseDurationMillis;
+    private final boolean scheduledWrite;
+    private final long scheduledWriteIntervalSeconds;
+    private final String scheduledValueSource;
     private final PulseWriteController pulseController = new PulseWriteController();
     private final ChannelUpdateTracker updateTracker;
 
@@ -48,6 +51,7 @@ final class ModbusChannelRuntime {
             int readSubIndex, ValueType readValueType, String itemType, ModbusExtTransformation readTransformation,
             @Nullable Integer writeStart, int writeSubIndex, @Nullable ValueType writeValueType,
             ModbusExtTransformation writeTransformation, String writeMode, long pulseDurationMillis,
+            boolean scheduledWrite, long scheduledWriteIntervalSeconds, String scheduledValueSource,
             long updateUnchangedValuesEveryMillis) {
         this.uid = uid;
         this.pollStart = pollStart;
@@ -64,6 +68,9 @@ final class ModbusChannelRuntime {
         this.writeTransformation = writeTransformation;
         this.writeMode = writeMode;
         this.pulseDurationMillis = pulseDurationMillis;
+        this.scheduledWrite = scheduledWrite;
+        this.scheduledWriteIntervalSeconds = scheduledWriteIntervalSeconds;
+        this.scheduledValueSource = scheduledValueSource;
         this.updateTracker = new ChannelUpdateTracker(updateUnchangedValuesEveryMillis);
     }
 
@@ -190,10 +197,30 @@ final class ModbusChannelRuntime {
             }
         }
 
+        String scheduledValueSource = config.scheduledValueSource == null ? "" : config.scheduledValueSource.trim();
+        if (config.scheduledWrite) {
+            if (!hasWrite) {
+                throw new IllegalArgumentException("Scheduled write requires writeStart");
+            }
+            if (!writeMode.equals("direct")) {
+                throw new IllegalArgumentException("Scheduled write is not supported with Pulse mode");
+            }
+            if (writeValueType == null || writeValueType.getBits() < 16) {
+                throw new IllegalArgumentException("Scheduled write requires a full-register write value type");
+            }
+            if (config.scheduledWriteIntervalSeconds < 1) {
+                throw new IllegalArgumentException("scheduledWriteIntervalSeconds must be >= 1");
+            }
+            if (!scheduledValueSource.equalsIgnoreCase("unixTime")) {
+                throw new IllegalArgumentException("Unsupported scheduledValueSource '" + config.scheduledValueSource + "'");
+            }
+        }
+
         return new ModbusChannelRuntime(channel.getUID(), poller.start(), poller.length(), poller.registerPoll(),
                 hasRead ? index : -1, subIndex, valueType, channel.getAcceptedItemType(),
                 new ModbusExtTransformation(List.of(config.readTransform)), writeStart, writeSubIndex, writeValueType,
                 new ModbusExtTransformation(List.of(config.writeTransform)), writeMode, config.pulseDurationMillis,
+                config.scheduledWrite, config.scheduledWriteIntervalSeconds, scheduledValueSource,
                 config.updateUnchangedValuesEveryMillis);
     }
 
@@ -203,6 +230,9 @@ final class ModbusChannelRuntime {
     @Nullable ValueType writeValueType() { return writeValueType; }
     boolean isPulseMode() { return writeMode.equals("pulse"); }
     long pulseDurationMillis() { return pulseDurationMillis; }
+    boolean isScheduledWrite() { return scheduledWrite; }
+    long scheduledWriteIntervalSeconds() { return scheduledWriteIntervalSeconds; }
+    String scheduledValueSource() { return scheduledValueSource; }
     boolean tryBeginPulse(boolean feedback, boolean requested) { return pulseController.tryBegin(feedback, requested); }
     boolean completePulseAndBeginPending() { return pulseController.completeAndBeginPending(); }
     void observePulseFeedback(boolean feedback) { pulseController.observeFeedback(feedback); }

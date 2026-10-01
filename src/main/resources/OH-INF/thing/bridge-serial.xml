@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="modbusext"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+ xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+ <bridge-type id="serial">
+  <label>Modbus Ext Serial Slave</label>
+  <description>Serial RTU/ASCII/BIN endpoint for Modbus Ext pollers.</description>
+  <config-description>
+   <parameter name="port" type="text" required="true"><label>Serial Port</label><context>serial-port</context><limitToOptions>false</limitToOptions><description>Serial port, for example /dev/ttyUSB0 or COM1.</description></parameter>
+   <parameter name="id" type="integer" min="0" max="247"><label>Slave Id</label><default>1</default></parameter>
+   <parameter name="baud" type="integer"><label>Baud</label><default>9600</default><options><option value="1200">1200</option><option value="2400">2400</option><option value="4800">4800</option><option value="9600">9600</option><option value="19200">19200</option><option value="38400">38400</option><option value="57600">57600</option><option value="115200">115200</option></options></parameter>
+   <parameter name="dataBits" type="integer"><label>Data Bits</label><default>8</default><options><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option></options></parameter>
+   <parameter name="parity" type="text"><label>Parity</label><default>none</default><options><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option></options></parameter>
+   <parameter name="stopBits" type="text"><label>Stop Bits</label><default>1.0</default><options><option value="1.0">1</option><option value="1.5">1.5</option><option value="2.0">2</option></options></parameter>
+   <parameter name="encoding" type="text"><label>Encoding</label><default>rtu</default><options><option value="rtu">RTU</option><option value="ascii">ASCII</option><option value="bin">BIN</option></options></parameter>
+   <parameter name="timeBetweenTransactionsMillis" type="integer" min="0" unit="ms"><label>Time Between Transactions</label><default>35</default></parameter>
+
+   <parameter name="echo" type="boolean"><label>RS485 Echo Mode</label><default>false</default><advanced>true</advanced></parameter>
+   <parameter name="receiveTimeoutMillis" type="integer" min="0" unit="ms"><label>Receive Timeout</label><default>1500</default><advanced>true</advanced></parameter>
+   <parameter name="flowControlIn" type="text"><label>Flow Control In</label><default>none</default><options><option value="none">None</option><option value="xon/xoff in">XON/XOFF</option><option value="rts/cts in">RTS/CTS</option></options><advanced>true</advanced></parameter>
+   <parameter name="flowControlOut" type="text"><label>Flow Control Out</label><default>none</default><options><option value="none">None</option><option value="xon/xoff out">XON/XOFF</option><option value="rts/cts out">RTS/CTS</option></options><advanced>true</advanced></parameter>
+   <parameter name="connectMaxTries" type="integer" min="1"><label>Maximum Connection Tries</label><default>1</default><advanced>true</advanced></parameter>
+   <parameter name="afterConnectionDelayMillis" type="integer" min="0" unit="ms"><label>Connection Warm-up Time</label><default>0</default><advanced>true</advanced></parameter>
+   <parameter name="connectTimeoutMillis" type="integer" min="0" unit="ms"><label>Connect Timeout</label><default>10000</default><advanced>true</advanced></parameter>
+  </config-description>
+ </bridge-type>
+</thing:thing-descriptions>
